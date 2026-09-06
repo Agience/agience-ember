@@ -45,26 +45,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Falls back to the job's own GITHUB_TOKEN when the PAT is absent. Supplying an EMPTY token is
-      # a hard error, which is a worse failure than the Not Found it replaces.
+      # prism, crystal and mantle are PUBLIC and carry no token line: a token on a public checkout
+      # is noise that hides which one actually needs a credential.
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-prism-py
           path: .siblings/prism
-          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-crystal
           path: .siblings/crystal
-          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-mantle
           path: .siblings/mantle
-          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
-      # The operator bundles. `prism.runner` resolves a group to a sha-verified payload and there is
-      # no in-package copy to fall back to, so without this five test files fail AT COLLECTION with
-      # UnknownBundleGroupError, before anything they mean to test has run.
+
+      # The operator bundles, and the ONE checkout here that needs a credential.
+      #
+      # `prism.runner` resolves a group to a sha-verified payload and there is no in-package copy to
+      # fall back to, so without the payloads 15 modules fail at IMPORT and a further ~125 tests fail
+      # when they call the runner — 140 in total, measured. There is no useful partial run, so this
+      # job needs them.
+      #
+      # `agience-observe` is private and this repository is public: a public repo's own GITHUB_TOKEN
+      # cannot read a private sibling, so `WORKSPACE_READ_TOKEN` is required until observe is
+      # published. When it is, drop the token line — nothing else here changes.
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-observe

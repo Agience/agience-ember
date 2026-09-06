@@ -8,16 +8,21 @@ it can, and reaches the mesh only on a miss.
 
 ```bash
 pip install -e '.[dev]'
-export AGIENCE_BUNDLE_ROOT=/path/to/agience-observe/bundles
 python -m pytest -q
 ```
 
 Every test lives under `tests/`, which `pyproject.toml` sets as the only `testpaths` root.
 
-**`AGIENCE_BUNDLE_ROOT` is not optional.** `prism.runner` resolves an operator group to a
-sha-verified payload and there is no in-package copy to fall back to, so without it five test files
-fail *at collection* with `UnknownBundleGroupError` — before anything they mean to test has run.
-Point it at `bundles/` in an `agience-observe` checkout.
+**The suite needs the operator bundles.** `prism.runner` resolves an operator group to a
+sha-verified payload and there is no in-package copy to fall back to — a second copy of a
+content-addressed payload can drift from the one the mesh carries, and the sha gate would then
+verify the wrong bytes faithfully. Without them 15 modules fail at import and about 125 more tests
+fail when they call the runner.
+
+`tests/conftest.py` finds them in a sibling `agience-observe` checkout, so with one beside this
+repository there is nothing to set. Otherwise point `AGIENCE_BUNDLE_ROOT` at a `bundles/`
+directory. Either way the header line at the top of every run says which it used, or that it found
+neither.
 
 The suite is disk-bound and runs about three minutes serially. `pyproject.toml` explains why there
 is no `-n auto` default: two reps per config could not distinguish any worker count from any other.

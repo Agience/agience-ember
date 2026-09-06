@@ -1,0 +1,68 @@
+# --- Secrets & env ---
+.env
+.env.*
+!.env*.example
+*.token
+keys/
+secrets/
+compose/secrets/
+
+# --- Runtime data / volumes ---
+.data/
+.data-*/
+*.sqlite
+*.sqlite3
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+*.whl
+MANIFEST
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.cover
+
+# --- Node / frontend ---
+node_modules/
+.vite/
+.next/
+.docusaurus/
+.cache/
+*.tsbuildinfo
+
+# --- IDE / OS ---
+.vscode/*
+# the Mantle MCP server, tracked deliberately -- agience-build/scripts/mcp_config.py
+!.vscode/mcp.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# The lattice a local run creates. It was tracked (empty) until 2026-09-06; a store is state,
+# not source.
+lattice.db
+*.sqlite
+*.sqlite3

@@ -1,0 +1,174 @@
+[build-system]
+# No `wheel`. setuptools builds a wheel through PEP 517 without it, and listing it means a
+# `--no-isolation` build fails on a machine that has setuptools and not the shim.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agience-ember"
+version = "0.1.0"
+description = "Ember — an observer unit: the Agience local leaf/cache, two-way, holds its own shards and runs disconnected. Import name is `ember`."
+readme = { file = "README.md", content-type = "text/markdown" }
+# 3.11, matching every package below it. Ember imports `agience-prism`, `agience-crystal` and
+# `agience-mantle`, and all three require 3.11 — so a floor of 3.10 here is a promise this package
+# cannot keep: pip on 3.10 installs ember and then fails resolving its own dependencies.
+requires-python = ">=3.11"
+# DUAL-LICENSED, AND THE MANIFEST DECLARES ONLY THE AGPL HALF ON PURPOSE.
+# This package is offered under AGPL-3.0-only OR a commercial licence (see COMMERCIAL_LICENSE.md).
+# `license = "AGPL-3.0-only OR LicenseRef-Ikailo-Commercial"` is a valid PEP 639 expression and it
+# is still wrong here. SPDX `A OR B` means the recipient MAY CHOOSE either, and a recipient of this
+# package cannot: the commercial licence is not conveyed by the download, it is negotiated.
+# Declaring it would assert a grant the artifact does not carry. The manifest states what you
+# actually receive; the offer of the other half lives in LICENSE, NOTICE, README and
+# COMMERCIAL_LICENSE.md.
+license = "AGPL-3.0-only"
+authors = [{ name = "Ikailo Inc.", email = "connect@agience.ai" }]
+keywords = ["agience", "ember", "observer", "leaf", "cache", "shards", "offline", "mesh"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Database :: Front-Ends",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+# Ember is AGPL-3.0 (the platform node). It imports no `chorus` and no `lumen` — architecture, not
+# license: Ember is the substrate/node personas reach into (persona→ember), and it reaches the rest
+# of the platform over the ground plane (the mantle lattice / the wire, provenance-correlated)
+# rather than by linking. That keeps the DAG acyclic and Ember standalone-deployable.
+dependencies = [
+    "numpy>=1.24",        # BSD — anchor geometry
+    "cryptography>=42.0", # Apache/BSD — Ed25519 shard signatures
+    "agience-prism[trust,vector,wire]>=0.1.2",
+                          # Apache — declared because ember imports it directly, at 63 import sites
+                          # across non-test source:
+                          #   [wire]  frames · conservation · demurrage · propagation · minhash ·
+                          #           reach · error_threshold · pump (16 sites). Needs numpy +
+                          #           cryptography, both named above.
+                          #   base    envelope · resolution · mass · grounding · runner · law ·
+                          #           attestation · canonical · delegate · source · crystal_model
+                          #           (47 sites) — stdlib-only, no extra.
+                          #   [trust] `prism.trust` 4 sites — genesis (`opsign`), signal x2
+                          #           (`opsign`), serve (`authority_trust.verify_jwt`). python-jose.
+                          #   [vector] `prism.vector` 1 site — signal/projection. numpy.
+                          # The rule is one rule: declare what you import directly. An edge that
+                          # only resolves transitively through someone else's manifest is a fact
+                          # about that manifest, not a declaration.
+    "agience-crystal[ontology]>=0.1.0",  # Apache — the ontology: `crystal.ontology.{driver,geometry,lookup,
+                          # coupling}` is where IC, the Jiang-Conrath coordinate, `jc_tree`, the
+                          # lexical entry index and the relation coupling signs live. SIX
+                          # MODULE-SCOPE import sites (measured 2026-08-17, AST, direct children of
+                          # the module body — not the 46 further in-function ones):
+                          #   ember/__init__.py:97 · ontology/__init__.py:42 · ontology/match.py:54
+                          #   runtime/breeding.py:38 · runtime/capability.py:72
+                          #   signal/forgetting.py:37
+                          # `ember/__init__.py:97` is the one that settles it: a bare `import ember`
+                          # executes it, so `pip install agience-ember` without crystal raised
+                          # ImportError on the first import. This was undeclared while the manifest
+                          # stated the rule it was breaking — it only ever resolved because every
+                          # repo in this workspace happens to be `pip install -e`'d.
+    "agience-mantle>=0.1.0",  # Apache — mantle.search.anchors is the shared coordinate system,
+                          # mantle.db is the store, mantle.shard is the cache/store/local
+                          # collection layer, and mantle.mesh is the mesh. Module-level imports in
+                          # runtime/boot.py, corpus/ingest.py and ember/__init__.py — a hard edge,
+                          # not a lazy one. Mantle imports nothing from ember, so the DAG stays
+                          # acyclic.
+]
+# `sklearn`, `nltk`, `datasets`, `huggingface_hub`, `pyarrow` and `wn` are imported inside functions
+# in ember/corpus/ and ember/genesis.py, and are declared nowhere. They are corpus-build tools
+# rather than runtime dependencies. The huggingface calls fetch datasets (repo_type="dataset"), so
+# no weights are pulled. An editable install resolves them from the environment, so the test suite
+# exercises the runtime with them present.
+
+[project.urls]
+Homepage = "https://agience.ai"
+Source = "https://github.com/Agience/agience-ember"
+Issues = "https://github.com/Agience/agience-ember/issues"
+
+[project.optional-dependencies]
+# There is no `embed` extra. Semantic retrieval is the computed ontology coordinate
+# (`crystal.ontology.geometry`), so no embedder ships here — including a distilled
+# sentence-transformer, which is static at inference but trained in provenance.
+#
+# `host` serves Ember's operator surface to local services (the "vice versa" direction). It is a
+# no-op that resolves to a dependency already required above, kept so `pip install
+# agience-ember[host]` succeeds.
+host = ["agience-prism>=0.1.2"]
+# The test runners. No `pytest-asyncio`: this suite has zero async tests — measured, not
+# assumed — so listing it would install a plugin nothing here uses.
+dev = ["pytest>=8", "pytest-timeout>=2.2", "build>=1.0"]
+
+# The instrument's own dependency. `ember/optics.py` imports entroptics eagerly, and it is the one
+# module in this package that may.
+#
+# It is an extra rather than a hard dependency because the entroptics-free surface is real and
+# load-bearing: Ember's cache, runner, relay, identity, corpus and config all import and work with
+# no instrument present. A node that carries frames installs the base; a node that measures them
+# installs `[optics]`; `prism.instrument` reports the missing measurement at the point of
+# measurement rather than failing at import. A hard dependency would put entroptics on every leaf
+# that only ever holds shards.
+#
+# Both this and the base resolve from PyPI — `entroptics` 0.2.1 is published, which satisfies the
+# range below. The reason for the extra is the one above, not availability.
+optics = ["entroptics>=0.2,<0.3"]
+# Bootstrap only — materialising WordNet into the corpus, once. Not a runtime dependency.
+#
+# WordNet lives in the corpus as `wn-*` artifacts and `crystal.ontology.driver` serves its structure
+# from there; `activation`, the geometry, `forgetting`, the templates and the keyed path all read
+# the driver and work with `nltk` poisoned in sys.modules. The remaining uses are
+# `genesis.ingest_stage0_wordnet` and `ingest`'s relation edges, which create those artifacts from
+# the canonical source — an unavoidable chicken-and-egg, bounded to a one-time act.
+#
+# Declaring it as an extra is what makes "the runtime does not need nltk" a checkable statement
+# rather than a belief. `wn` joins nltk under the same rule: stage-0 acquisition only (op.source.omw
+# pulls the license-vetted OMW lexicons through it; OEWN/CILI/ConceptNet stream over plain GET and
+# do not need it). The runtime serves everything from the corpus rows those ingesters mint.
+bootstrap = ["nltk>=3.9", "wn>=0.13"]
+
+# There is no large-model extra. Ember's engine reaches entroptics through `ember.optics` —
+# lightweight reasoning over artifacts, with knowledge retrieved rather than compressed into
+# weights. That is why `dependencies` above is four permissive packages and no model runtime: a leaf
+# that had to ship a GGUF would not be a leaf.
+
+[project.scripts]
+ember = "ember.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+# `src/` holds `ember/` alone today, and `include` keeps it that way. Without it setuptools writes
+# any other directory under `src/` into `top_level.txt` and can ship it — which is how a sibling
+# repo's wheel came to install a top-level `tests` module into site-packages.
+include = ["ember*"]
+
+# No `[tool.setuptools.package-data]`. `src/ember/` is Python and nothing else — measured, zero
+# non-`.py` files — so a data declaration here would be a no-op that reads like a shipped payload.
+# The operator bundles live in `agience-observe/bundles/` (see `ember/runtime/runner.py`) and reach
+# a node as artifacts or from agience-observe; ember ships no copies of them.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# ── No `-n auto` default ─────────────────────────────────────────────────────────────────────
+# Parallelism cannot be shown to help this suite. Two reps per config on an 8-core box:
+#
+#     -n0                    169.3 s, 111.3 s
+#     -n3 --dist loadfile     89.0 s, 135.2 s
+#     -n auto --dist loadfile 105.0 s, 114.5 s
+#
+# Those bands overlap completely — the run-to-run spread is larger than the difference between
+# configs — so no config here is distinguishable from any other. What took the suite from 149 s to
+# 89 s serial was `_FakeArtifacts.write_mark` and the cached offline index (`tests/_fakes.py`).
+#
+# The spread itself points at I/O. This suite is disk-bound: a `tempfile.mkdtemp` per test, sqlite
+# lattices, and a 12.8 MB index each worker reads on start. Eight workers contending for that is why
+# more of them did not go faster. The thing to fix, if this is ever worth revisiting, is the I/O
+# rather than the worker count.
+#
+# Add `-n auto --dist loadfile` on the command line to try it. Use `loadfile` rather than `load`:
+# `crystal.ontology.driver` carries process-global state (`_SOURCE`, `_INDEX`, `_KEYED_READY`), and
+# per-test distribution reorders within a file. `loadfile` keeps each file whole in one worker,
+# which is the granularity the module-scoped fixtures already assume.

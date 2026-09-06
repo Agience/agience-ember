@@ -1,0 +1,85 @@
+name: ci
+
+# Two jobs, because "it installs" and "it works" are different claims and one run tests neither.
+#
+# Ember declares four dependencies and three of them are siblings — `agience-prism`,
+# `agience-crystal`, `agience-mantle`. The install job resolves them FROM AN INDEX, which is the only
+# way to catch a dependency that names a distribution nobody publishes; every checkout in the
+# developer workspace is `pip install -e`'d, and an editable install satisfies an import without ever
+# resolving the requirement.
+#
+# The suite job resolves them from this organization's repositories instead, so the tests run against
+# the revision beside this one rather than against whatever version PyPI served that day.
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+
+jobs:
+  # The install, from an index. Nothing here is a checkout.
+  install-resolves:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install .
+      - name: A bare `import ember` works
+        run: |
+          python - <<'PY'
+          import ember
+          # `ember/__init__.py` imports `crystal.ontology` at module scope, so this line is what
+          # catches an undeclared or misnamed sibling: it raised ImportError for exactly that
+          # reason once, and only an install from an index can see it.
+          print("import ember: ok")
+          PY
+      - name: The console script resolves
+        run: python -c "from ember.cli import main; print('ember console script ok')"
+
+  # The suite. 1,300-odd tests, disk-bound, about three minutes serial.
+  full-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Falls back to the job's own GITHUB_TOKEN when the PAT is absent. Supplying an EMPTY token is
+      # a hard error, which is a worse failure than the Not Found it replaces.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-prism-py
+          path: .siblings/prism
+          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-crystal
+          path: .siblings/crystal
+          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-mantle
+          path: .siblings/mantle
+          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+      # The operator bundles. `prism.runner` resolves a group to a sha-verified payload and there is
+      # no in-package copy to fall back to, so without this five test files fail AT COLLECTION with
+      # UnknownBundleGroupError, before anything they mean to test has run.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-observe
+          path: .siblings/observe
+          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools
+      - run: pip install './.siblings/prism[trust,vector,wire]' './.siblings/crystal[ontology]' ./.siblings/mantle
+      - run: pip install -e '.[dev]'
+      - name: Run the suite
+        env:
+          AGIENCE_BUNDLE_ROOT: ${{ github.workspace }}/.siblings/observe/bundles
+          # One thread is the only safe setting in CI: OpenBLAS otherwise faults at exit or hangs.
+          OPENBLAS_NUM_THREADS: "1"
+        run: python -m pytest -q --timeout=300

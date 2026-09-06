@@ -1,0 +1,23 @@
+# This file decides what bytes git stores. `core.autocrlf` is `false` here (global and local), so
+# git performs no conversion of its own and an editor that emits CRLF flips the stored file
+# permanently. A flipped file turns a small edit into a whole-file diff and takes `git blame` with
+# it.
+#
+# `text=auto` normalises to LF in the repository on commit while leaving working copies alone. It
+# applies as files are committed, so it needs no `git add --renormalize` sweep and rewrites no
+# history.
+* text=auto
+
+# Line endings that are load-bearing. A shell script or a Dockerfile with CRLF fails inside a Linux
+# container with an error that names the interpreter rather than the line endings.
+*.sh   text eol=lf
+*.bash text eol=lf
+*.py   text eol=lf
+Dockerfile text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
+# Windows-native files keep CRLF deliberately.
+*.bat text eol=crlf
+*.ps1 text eol=crlf

@@ -19,7 +19,7 @@ content-addressed payload can drift from the one the mesh carries, and the sha g
 verify the wrong bytes faithfully. Without them 15 modules fail at import and about 125 more tests
 fail when they call the runner.
 
-`tests/conftest.py` finds them in a sibling `agience-observe` checkout, so with one beside this
+`tests/conftest.py` finds them in a sibling `agience-chorus` checkout, so with one beside this
 repository there is nothing to set. Otherwise point `AGIENCE_BUNDLE_ROOT` at a `bundles/`
 directory. Either way the header line at the top of every run says which it used, or that it found
 neither.

@@ -33,7 +33,8 @@ if _HERE not in sys.path:
 # `prism.runner` resolves an operator group to a sha-verified payload and there is no in-package
 # copy to fall back to — deliberately: a second copy of a content-addressed payload can drift from
 # the one the mesh carries, and the sha gate would then verify the wrong bytes faithfully. So the
-# payloads live in `agience-observe/bundles/`.
+# payloads live in `agience-chorus/bundles/` — chorus is where they are BUILT FROM, and
+# ember reaches no runner repository for them: the payloads belong with their source.
 #
 # This finds a sibling checkout so nobody has to set the variable by hand. It does NOT make the
 # suite runnable without one, and that was measured rather than assumed: fifteen modules fail at
@@ -42,7 +43,7 @@ if _HERE not in sys.path:
 # into test failures and buys nothing, so it is not attempted — the suite needs the bundles, and the
 # header below says so rather than letting a reader discover it one failure at a time.
 _BUNDLES = Path(__import__("os").environ.get("AGIENCE_BUNDLE_ROOT")
-                or (Path(__file__).resolve().parents[2] / "agience-observe" / "bundles"))
+                or (Path(__file__).resolve().parents[2] / "agience-chorus" / "bundles"))
 BUNDLES_PRESENT = _BUNDLES.is_dir() and any(_BUNDLES.glob("*.json"))
 
 if BUNDLES_PRESENT:
@@ -57,5 +58,5 @@ def pytest_report_header(config):
         return f"operator bundles: {_BUNDLES}"
     return (
         f"operator bundles: NOT FOUND at {_BUNDLES}. ~140 tests need them and will fail. "
-        f"Set AGIENCE_BUNDLE_ROOT, or check out `agience-observe` beside this repository."
+        f"Set AGIENCE_BUNDLE_ROOT, or check out `agience-chorus` beside this repository."
     )

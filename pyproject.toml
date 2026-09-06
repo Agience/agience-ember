@@ -147,8 +147,9 @@ include = ["ember*"]
 
 # No `[tool.setuptools.package-data]`. `src/ember/` is Python and nothing else — measured, zero
 # non-`.py` files — so a data declaration here would be a no-op that reads like a shipped payload.
-# The operator bundles live in `agience-observe/bundles/` (see `ember/runtime/runner.py`) and reach
-# a node as artifacts or from agience-observe; ember ships no copies of them.
+# The operator bundles live in `agience-chorus/bundles/` (see `ember/runtime/runner.py`) — chorus is
+# where they are built from — and reach a node as `bundle-<group>` artifacts; ember ships no copies
+# of them.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

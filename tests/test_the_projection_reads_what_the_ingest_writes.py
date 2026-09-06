@@ -5,7 +5,7 @@ relations survive parsing, and `crystal.ontology.lookup` walks a set of labels e
 them. If those drift apart, the walk comes back empty on a correctly-backfilled store and nothing
 raises — the projection just quietly stops projecting.
 
-It lived in crystal's suite until the aperture split, and it could not stay there: it reads
+It lived in crystal's suite and could not stay there: it reads
 `ember.corpus`, so making the claim from crystal meant a checkout of the repository ABOVE crystal.
 Ember declares and imports `agience-crystal`, so ember can read both sides with the arrow pointing
 the way the packages already point. This was also the only test in crystal's suite that needed

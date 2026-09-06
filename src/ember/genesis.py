@@ -355,8 +355,15 @@ def is_bootstrapped(store) -> bool:
 
 WORDNET_CONTENT_TYPE = "text/x-wordnet"
 SOURCE_CONTENT_TYPE = "application/vnd.agience.source+json"
-from ember.runtime.runner import evolution as _evolution   # the single distribution path (ember/runtime/runner.py)
-OPERATOR_CONTENT_TYPE = _evolution.OPERATOR_CONTENT_TYPE   # one home for the operator content type
+# One home for the operator content type, and it is `crystal.operator_schema` — the module that
+# defines the operator schema, in a package ember already declares and imports at module scope.
+#
+# This used to read the constant off the `evolution` BUNDLE (`from ember.runtime.runner import
+# evolution`), which resolved a sha-verified chorus payload AT IMPORT to obtain one string. That
+# made `import ember.genesis` fail outright wherever the payloads were absent — a package-level
+# dependency on a distribution artifact, for a constant. The bundles remain the single distribution
+# path for operator CODE; a content type is not code.
+from crystal.operator_schema import OPERATOR_CONTENT_TYPE   # noqa: F401  (re-exported below)
 
 
 def _mint_wordnet_source(store, *, author: str) -> None:

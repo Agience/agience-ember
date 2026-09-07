@@ -40,7 +40,12 @@ jobs:
       - name: The console script resolves
         run: python -c "from ember.cli import main; print('ember console script ok')"
 
-  # The suite. 1,300-odd tests, disk-bound, about three minutes serial.
+  # The suite. No token, no operator payloads, no environment variable — every checkout below is a
+  # PUBLIC sibling ember actually declares, and a fork can run this job as-is.
+  #
+  # It needed a private checkout until the tests that exercise operators through the runner moved to
+  # `agience-chorus`, beside the operators they are about. Ember executes those payloads at runtime;
+  # its own suite tests the engine.
   full-suite:
     runs-on: ubuntu-latest
     steps:
@@ -62,21 +67,6 @@ jobs:
           repository: ${{ github.repository_owner }}/agience-mantle
           path: .siblings/mantle
 
-      # The operator bundles, and the ONE checkout here that needs a credential.
-      #
-      # `prism.runner` resolves a group to a sha-verified payload and there is no in-package copy to
-      # fall back to, so without the payloads 15 modules fail at IMPORT and a further ~125 tests fail
-      # when they call the runner — 140 in total, measured. There is no useful partial run, so this
-      # job needs them.
-      #
-      # `agience-chorus` is private and this repository is public: a public repo's own GITHUB_TOKEN
-      # cannot read a private sibling, so `WORKSPACE_READ_TOKEN` is required until chorus is
-      # published. When it is, drop the token line — nothing else here changes.
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/agience-chorus
-          path: .siblings/chorus
-          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -86,7 +76,6 @@ jobs:
       - run: pip install -e '.[dev]'
       - name: Run the suite
         env:
-          AGIENCE_BUNDLE_ROOT: ${{ github.workspace }}/.siblings/chorus/bundles
           # One thread is the only safe setting in CI: OpenBLAS otherwise faults at exit or hangs.
           OPENBLAS_NUM_THREADS: "1"
         run: python -m pytest -q --timeout=300

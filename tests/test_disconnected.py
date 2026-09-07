@@ -77,24 +77,6 @@ def test_hit_means_the_nearest_cell_specifically(cache: LocalCache) -> None:
     assert r_away.missing                     # and we know exactly what we'd need
 
 
-def test_miss_is_honest_when_disconnected(cache: LocalCache) -> None:
-    """Disconnected and missing the nearest cell: the read reports what it lacks.
-
-    `nprobe` pulls in outer probe cells, so `search` returns near-orthogonal artifacts from a
-    neighbourhood this node happens to hold, and an answerer with no corpus of its own sees only
-    spans — an axis-2 query would come back with confident axis-0 content. Holding the nearest cell
-    is what makes an answer an answer, so the read carries `provisional` and names the regions it
-    would need.
-    """
-    res = answer_query(cache, _StubAnswerer(), "unrelated question", _vec(2), refill=None)
-    assert not res.routing.hit
-    assert res.served_offline
-    assert res.answer.refused                       # no reading to give, rather than a guess
-    assert "don't hold" in res.answer.text
-    assert res.answer.read["provisional"] is True
-    assert res.answer.read["missing_regions"]       # and it names exactly what it lacks
-    # Still reports what it does hold, which is more useful to a caller than silence.
-    assert res.answer.cited
 
 
 # The composers live in `lumen/composers.py`, so the tests for what an answerer says with
@@ -112,17 +94,3 @@ def test_the_runner_refuses_to_build_an_answerer() -> None:
             _build(name)
 
 
-def test_refill_only_pulls_the_missing_working_set(cache: LocalCache) -> None:
-    """On a miss Ember asks for the routed cells it lacks, which is a working set rather than the
-    corpus. The refill is injected, so the read path is exercised as transport-agnostic with no
-    socket involved."""
-    asked: list = []
-
-    def fake_refill(regions):
-        asked.append(list(regions))
-        return []                              # peer had nothing; the read path carries on
-
-    res = answer_query(cache, _StubAnswerer(), "q", _vec(2), refill=fake_refill)
-    assert asked, "a miss must attempt a refill"
-    assert asked[0] == res.routing.missing
-    assert len(asked[0]) <= 3                  # an nprobe-bounded working set

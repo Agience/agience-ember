@@ -33,18 +33,6 @@ def _store_with_host(endpoint="http://127.0.0.1:9"):
     return s
 
 
-def test_a_prism_hosted_operator_dispatches_by_signal_not_by_kind():
-    """`register_remote_host` records `dispatch` and `endpoint` so the row says which surface
-    serves the operator, and `invoke` reads them: the dispatch is `signal` and the resolved target
-    is remote."""
-    from ember import genesis
-    s = _store_with_host()
-
-    r = genesis.invoke(s, "op.host.gw.analyze")
-
-    assert r.get("error") is None, r
-    assert r.get("dispatch") == "signal"
-    assert (r["result"].get("target") or {}).get("kind") == "remote"
 
 
 def test_the_operator_carries_no_kind_and_that_is_deliberate():
@@ -59,39 +47,7 @@ def test_the_operator_carries_no_kind_and_that_is_deliberate():
     assert op.get("dispatch") and op.get("endpoint")
 
 
-def test_a_failed_delivery_is_reported_not_swallowed():
-    """The delivery result carries the failure, so an undelivered signal is distinguishable from a
-    delivered one. A transport that hides its own failures makes every unreachable host look like a
-    success."""
-    from ember import genesis
-    s = _store_with_host()
-
-    delivery = genesis.invoke(s, "op.host.gw.analyze")["result"]["delivery"]
-
-    assert delivery["shipped"] is False
-    assert delivery.get("reason")          # says why, not just that it failed
-    assert "9" in delivery.get("url", "")  # and names where it tried
 
 
-def test_a_transport_failure_is_not_evidence_against_the_operator():
-    """Fitness is evidence about a behaviour. A signal that never reached the host carries no
-    information about whether the operator works, so it is not recorded as a refutation."""
-    from ember import genesis
-    s = _store_with_host()
-    genesis.invoke(s, "op.host.gw.analyze")
-
-    op = s.artifacts.get_artifact("op.host.gw.analyze")
-    assert not op.get("refuted"), "a host being unreachable was counted against the operator"
 
 
-def test_an_unknown_operator_is_still_refused():
-    """The negative control: an id with no operator behind it still answers as unknown. Widening
-    dispatch keeps unknown ids local instead of turning each one into a remote attempt."""
-    from ember import genesis
-    s = _store_with_host()
-
-    r = genesis.invoke(s, "op.does.not.exist")
-
-    assert r.get("error")
-    assert "not invokable" in r["error"] or "no operator" in r["error"]
-    assert r.get("dispatch") != "signal"

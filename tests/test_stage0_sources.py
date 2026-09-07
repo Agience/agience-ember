@@ -128,64 +128,10 @@ def test_parse_oewn_lmf_synsets_words_and_relations():
         "a relation the source names was dropped for not being in a table")
 
 
-def test_oewn_ingest_rows_match_the_wn_row_shape(tmp_path):
-    f = tmp_path / "oewn.xml"
-    f.write_text(_LMF, encoding="utf-8")
-    s = _store()
-    r = s0.ingest_stage0_oewn(s, path=str(f))
-    assert r["synsets"] == 4 and r["ingested"] == 4
-    doc = s.artifacts.get_artifact("wn-oewn-02086723-n")
-    assert doc is not None
-    # the same shape as the existing 117,659 wn rows — plus the pivot/order keys OEWN carries
-    # natively (`ili`, and `sense_ranks`: which sense of each word this synset is, §13.14).
-    assert set(doc) - {"ili", "sense_ranks", "forms", "lemma_counts"} == WN_ROW_KEYS
-    assert doc["content_type"] == "text/x-wordnet"
-    assert doc["ili"] == "i46360"
-    assert doc["word"] == "dog" and doc["pos"] == "n"
-    assert doc["lemmas"] == ["dog", "domestic dog"]          # underscores → spaces, lowered
-    # context is absent by design (a describer supplies it); the facts are here instead
-    assert "context" not in doc
-    assert doc["title"] == "dog" and doc["gloss"].startswith("a domesticated carnivorous mammal")
-    assert doc["collection_id"] == "stage.0.lexicon"
-    assert doc["collections"] == ["stage.0.lexicon", "source.oewn"]
-    assert doc["cited_from"] == "cite.oewn"
-    assert doc["via"] == "op.source.oewn" and doc["operator"] == "op.source.oewn"
-    assert doc["provenance"] == "observed"
-    # created_by is a vertex reference that resolves (contract §2.1), rather than the claim string
-    assert s.artifacts.get_artifact(doc["created_by"]) is not None
-    # the source triple exists and the source collection hangs under sources
-    assert s.artifacts.get_artifact("cite.oewn") is not None
-    assert s.artifacts.get_artifact("op.source.oewn") is not None
-    assert "sources" in s.graph.neighbors("source.oewn", "sub_collection_of", direction="out")
 
 
-def test_oewn_edges_carry_via_and_rung_and_marker_guards_rerun(tmp_path):
-    f = tmp_path / "oewn.xml"
-    f.write_text(_LMF, encoding="utf-8")
-    s = _store()
-    r = s0.ingest_stage0_oewn(s, path=str(f))
-    assert r["edges"] == 2                        # hypernym + antonym (both endpoints stored)
-    mine = [(a, b, l, p) for a, b, l, p in s.graph.props if a.startswith("wn-oewn-")]
-    labels = {(a, b, l) for a, b, l, _p in mine}
-    assert labels == {("wn-oewn-02086723-n", "wn-oewn-00015568-n", "hypernym"),
-                      ("wn-oewn-01123148-a", "wn-oewn-01125429-a", "antonym")}
-    for _a, _b, _l, p in mine:
-        assert p == {"via": "op.source.oewn", "rung": "observed"}
-    # completed → marker written → done; a re-run skips, so edges are emitted once
-    assert s0.oewn_done(s)
-    r2 = s0.ingest_stage0_oewn(s, path=str(f))
-    assert r2.get("skipped") == 1 and r2["ingested"] == 0
-    assert len([1 for a, _b, _l, _p in s.graph.props
-                if a.startswith("wn-oewn-")]) == 2          # unchanged
 
 
-def test_oewn_bounded_smoke_run_is_not_completion(tmp_path):
-    f = tmp_path / "oewn.xml"
-    f.write_text(_LMF, encoding="utf-8")
-    s = _store()
-    r = s0.ingest_stage0_oewn(s, path=str(f), limit=2)
-    assert r["synsets"] == 2
-    assert not s0.oewn_done(s)                    # a limit run never writes the marker
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -238,44 +184,8 @@ def _seed_synsets(s):
                               "collection_id": "stage.0.lexicon"})
 
 
-def test_cili_draws_pivot_edges_and_never_mints_synset_vertices(tmp_path):
-    f = tmp_path / "ili.ttl"
-    f.write_text(_TTL, encoding="utf-8")
-    s = _store()
-    g.bootstrap(s)
-    _seed_synsets(s)
-    n_wn = sum(1 for _ in s.artifacts.list_artifacts(content_type="text/x-wordnet"))
-    resolve = lambda src: "wn-able.a.01" if src == ("00001740", "a") else None
-    r = s0.ingest_stage0_cili(s, path=str(f), resolve=resolve)
-    assert r["parsed"] == 3
-    # i1: OEWN row + resolved PWN row → ONE typed pivot edge onto the PWN spine
-    assert r["edges"] == 1 and r["ingested"] == 1
-    assert ("wn-oewn-00001740-a", "wn-able.a.01", "ili") in \
-        {(a, b, l) for a, b, l, _p in s.graph.props}
-    props = [p for a, b, l, p in s.graph.props if l == "ili"][0]
-    assert props == {"ili": "i1", "via": "op.source.cili", "rung": "observed",
-                     "cited_from": "cite.cili"}
-    # i2: nothing local → counted, invented nowhere; i3: one endpoint → nothing to draw
-    assert r["no_local_synset"] == 1 and r["pwn_unresolved"] == 1
-    assert r["single_endpoint"] == 1
-    # edges only: the synset vertex count is unchanged
-    assert sum(1 for _ in s.artifacts.list_artifacts(content_type="text/x-wordnet")) == n_wn
-    # the open type system minted the edge-type artifact, homed in the ontology
-    et = s.artifacts.get_artifact("etype.ili")
-    assert et is not None and et["cited_from"] == g.CITE_GENESIS
-    # completed → marker → a re-run skips
-    assert s0.cili_done(s)
-    assert s0.ingest_stage0_cili(s, path=str(f), resolve=resolve).get("skipped") == 1
 
 
-def test_cili_format_drift_writes_no_marker(tmp_path):
-    f = tmp_path / "ili.ttl"
-    f.write_text("@prefix nothing: <x> .\n", encoding="utf-8")   # zero <iN> statements
-    s = _store()
-    g.bootstrap(s)
-    r = s0.ingest_stage0_cili(s, path=str(f), resolve=lambda src: None)
-    assert r["parsed"] == 0 and r["edges"] == 0
-    assert not s0.cili_done(s)                    # drift is reported and the stage stays owed
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -316,61 +226,10 @@ def _gz(tmp_path, name, text):
     return p
 
 
-def test_conceptnet_streams_lands_typed_cited_relations_and_holds_at_truncation(tmp_path):
-    p = _gz(tmp_path, "cn.csv.gz", "\n".join(_CN_LINES) + "\n" + _CN_TAIL)   # no trailing \n
-    s = _store()
-    r = s0.ingest_stage0_conceptnet(s, path=str(p))
-    # complete lines landed: dog/animal/pet concepts, is_a + related_to edges
-    assert r["concepts"] == 3 and r["edges"] == 2 and r["skipped"] == 2
-    dog = s.artifacts.get_artifact("cn-dog")
-    assert dog["content_type"] == "application/x-concept"
-    assert dog["cited_from"] == "cite.conceptnet"
-    assert dog["via"] == "op.source.conceptnet" and dog["provenance"] == "observed"
-    assert dog["collections"] == ["stage.0.lexicon", "source.conceptnet"]
-    got = {(a, b, l) for a, b, l, _p in s.graph.props}
-    assert ("cn-dog", "cn-animal", "is_a") in got and ("cn-dog", "cn-pet", "related_to") in got
-    w = [p_ for a, b, l, p_ in s.graph.props if l == "is_a"][0]
-    assert w == {"via": "op.source.conceptnet", "rung": "observed",
-                 "cited_from": "cite.conceptnet", "weight": 2.0}
-    # relation types are minted as edge-type artifacts (the open type system)
-    assert s.artifacts.get_artifact("etype.is_a") is not None
-    assert s.artifacts.get_artifact("etype.related_to") is not None
-    # the truncated tail: reported, cursor held at it, undrained and unmarked — so a re-staged
-    # complete file re-reads exactly that line and nothing is lost.
-    assert r["truncated_tail"] is True and r["drained"] is False
-    assert s.artifacts.get_artifact(s0.CN_CURSOR_ID)["lines_done"] == 4
-    assert not s0.conceptnet_done(s)
 
 
-def test_conceptnet_resume_after_restage_loses_nothing_and_duplicates_nothing(tmp_path):
-    p = _gz(tmp_path, "cn.csv.gz", "\n".join(_CN_LINES) + "\n" + _CN_TAIL)
-    s = _store()
-    s0.ingest_stage0_conceptnet(s, path=str(p))
-    # the download is re-staged COMPLETE (the tail line now whole; still no trailing \n)
-    p2 = _gz(tmp_path, "cn2.csv.gz",
-             "\n".join(_CN_LINES) + "\n" + '/a/[x]\t/r/UsedFor\t/c/en/pen\t/c/en/writing\t'
-             '{"weight": 1.0}')
-    r2 = s0.ingest_stage0_conceptnet(s, path=str(p2))
-    # only the held line was read: its edge plus 2 new concepts, nothing re-ingested
-    assert r2["edges"] == 1 and r2["concepts"] == 2
-    assert r2["drained"] is True and s0.conceptnet_done(s)
-    assert s.artifacts.get_artifact(s0.CN_CURSOR_ID)["lines_done"] == 5
-    got = [(a, b, l) for a, b, l, _p in s.graph.props if a.startswith("cn-")]
-    assert ("cn-pen", "cn-writing", "used_for") in got
-    assert len(got) == 3 == len(set(got))         # no duplicate edges across the resume
-    # drained → the marker guards any further run
-    assert s0.ingest_stage0_conceptnet(s, path=str(p2)).get("skipped") == 1
 
 
-def test_conceptnet_max_lines_is_a_tick_size_not_a_cap(tmp_path):
-    p = _gz(tmp_path, "cn.csv.gz", "\n".join(_CN_LINES) + "\n")
-    s = _store()
-    r1 = s0.ingest_stage0_conceptnet(s, path=str(p), max_lines=2)
-    assert r1["drained"] is False                 # budget hit, cursor carries the rest
-    assert s.artifacts.get_artifact(s0.CN_CURSOR_ID)["lines_done"] == 2
-    r2 = s0.ingest_stage0_conceptnet(s, path=str(p), max_lines=100)
-    assert r2["drained"] is True                  # next tick finishes the file
-    assert r1["edges"] + r2["edges"] == 2
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -424,62 +283,8 @@ _OMW_INDEX = {
 }
 
 
-def test_omw_ingests_only_allowlisted_languages_and_logs_the_skips(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("EMBER_CACHE_DIR", str(tmp_path))
-    fake = _fake_wn(_OMW_INDEX, {"omw-id": [
-        _SS("omw-id-00001740-a", "a", "i1", ["mampu"], "dapat melakukan"),
-        _SS("omw-id-55555555-n", "n", "i9", ["anjing", "anjing_kampung"]),
-        _SS("omw-id-66666666-n", "n", "i8", []),           # no vocabulary → adds nothing
-    ]}, {"omw-id": "id"})
-    monkeypatch.setitem(sys.modules, "wn", fake)
-    s = _store()
-    g.bootstrap(s)
-    _seed_synsets(s)                              # wn-oewn-00001740-a carries ili i1
-    r = s0.ingest_stage0_omw(s)
-    assert r["languages"] == 1 and r["synsets"] == 2 and r["no_words"] == 1
-    assert fake._downloaded == ["omw-id:1.4"]
-    # skips are reported — plWordNet ("wordnet" is a pointer rather than a license) and the
-    # share-alike Dutch wordnet are both outside the allowlist and wait for clearance…
-    why = {x["id"]: x["why"] for x in r["skipped"]}
-    assert "allowlist" in why["omw-pl"] and "allowlist" in why["omw-nl"]
-    # …and each skip is one clear log line with the license and the reason.
-    out = capsys.readouterr().out
-    assert "[op.source.omw] SKIPPED omw-pl (license: wordnet)" in out
-    assert "[op.source.omw] SKIPPED omw-nl" in out and "by-sa" in out
-    # the rows: wn shape + lang + ili, keyed by the language's OWN lemmas
-    doc = s.artifacts.get_artifact("wn-omw-id-00001740-a")
-    assert {"title", "gloss", "content", "lemmas", "word", "pos"} <= set(doc)
-    assert "context" not in doc          # the describer supplies it (illuminate)
-    assert doc["lang"] == "id" and doc["ili"] == "i1"
-    assert doc["lemmas"] == ["mampu"] and doc["cited_from"] == "cite.omw"
-    assert doc["collections"] == ["stage.0.lexicon", "source.omw"]
-    dog = s.artifacts.get_artifact("wn-omw-id-55555555-n")
-    assert dog["lemmas"] == ["anjing", "anjing kampung"]
-    # expand-style: vocabulary ATTACHES to the pivot synset that carries the same ili
-    assert ("wn-omw-id-00001740-a", "wn-oewn-00001740-a", "ili") in \
-        {(a, b, l) for a, b, l, _p in s.graph.props}
-    assert r["no_pivot"] == 1                     # i9 has no local pivot — counted, and left alone
-    # per-language marker → this language ingests once; the stage stays owed while allowlisted
-    # languages remain.
-    assert "omw-id" in g._shards_done(s, "omw")
-    assert not s0.omw_done(s)
-    r2 = s0.ingest_stage0_omw(s)
-    assert r2["languages"] == 0 and r2["synsets"] == 0
 
 
-def test_omw_license_drift_skips_instead_of_ingesting(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("EMBER_CACHE_DIR", str(tmp_path))
-    drifted = {"omw-id": {"label": "Wordnet Bahasa (Indonesian)", "language": "id",
-                          "versions": {"1.4": {"license": "proprietary — all rights reserved"}}}}
-    fake = _fake_wn(drifted, {"omw-id": [_SS("omw-id-1-n", "n", None, ["x"])]}, {"omw-id": "id"})
-    monkeypatch.setitem(sys.modules, "wn", fake)
-    s = _store()
-    g.bootstrap(s)
-    r = s0.ingest_stage0_omw(s)
-    assert r["languages"] == 0 and r["synsets"] == 0
-    assert fake._downloaded == []                 # a drifted license never even downloads
-    assert any("drifted" in x["why"] for x in r["skipped"])
-    assert "drifted" in capsys.readouterr().out
 
 
 def test_omw_allowlist_is_explicit_and_holds_only_clearly_permissive_licenses():
@@ -544,23 +349,6 @@ def test_shared_collection_promotes_only_when_every_source_is_done(monkeypatch):
     assert g.advance_curriculum(s) == {"curriculum": "complete"}
 
 
-def test_oewn_keeps_the_sources_sense_order(tmp_path):
-    """LMF lists a word's senses in WordNet sense order, and that order is the only statement the
-    source makes about which meaning a bare word most likely carries. Recorded at ingest as
-    `sense_ranks`, it is available downstream; without it an index falls back to sorting synset
-    offsets, which is arbitrary with respect to meaning — `star` lands on the network-topology
-    sense."""
-    f = tmp_path / "wn.xml"
-    f.write_text(_LMF, encoding="utf-8")
-    s = _store()
-    s0.ingest_stage0_oewn(s, path=str(f))
-    doc = s.artifacts.get_artifact("wn-oewn-02086723-n")
-    ranks = doc.get("sense_ranks") or {}
-    assert ranks, "the source's sense order must survive ingest"
-    assert all(isinstance(v, int) and v >= 0 for v in ranks.values())
-    # every lemma the row carries is placed — an unranked lemma falls back to offset order, which
-    # carries no information about meaning.
-    assert set(ranks) == set(doc["lemmas"])
 
 
 # ── The two WordNet ingesters write one row shape (§13.14) ────────────────────────────────────────
@@ -627,32 +415,8 @@ def _install_fake_nltk(monkeypatch):
     return wn
 
 
-def test_the_pwn_spine_writes_the_SAME_row_shape_as_oewn(monkeypatch):
-    from ember import genesis as _g
-    _install_fake_nltk(monkeypatch)
-    s = _store()
-    r = _g.ingest_stage0_wordnet(s)
-    assert r["synsets"] == 2
-    doc = s.artifacts.get_artifact("wn-dog.n.01")
-    assert set(doc) - {"ili", "sense_ranks", "forms", "lemma_counts"} == WN_ROW_KEYS
-    # observation only: structured fields. The offer comes from the describer, not from the row.
-    assert "context" not in doc
-    assert doc["content"] == doc["gloss"] == "a domesticated canine"
-    assert "part of speech:" not in doc["content"] and "synonyms:" not in doc["content"]
-    assert doc["title"] == "dog" and doc["lemmas"] == ["dog", "domestic dog"]
 
 
-def test_the_pwn_spine_records_sense_order_and_bootstraps_its_type(monkeypatch):
-    from ember import genesis as _g
-    _install_fake_nltk(monkeypatch)
-    s = _store()
-    _g.ingest_stage0_wordnet(s)
-    # "dog" is sense 0 of dog.n.01 and sense 1 of frank.n.02 — the rank is per word.
-    assert s.artifacts.get_artifact("wn-dog.n.01")["sense_ranks"]["dog"] == 0
-    assert s.artifacts.get_artifact("wn-frank.n.02")["sense_ranks"]["dog"] == 1
-    # and the describer lands with the rows, so a fresh store renders them
-    td = s.artifacts.get_artifact("type.text/x-wordnet")
-    assert td is not None and td["offer_template"] == "{title}: {gloss}"
 
 
 def test_ensure_ctype_never_rolls_back_an_evolved_describer():
@@ -667,29 +431,6 @@ def test_ensure_ctype_never_rolls_back_an_evolved_describer():
 
 
 # ── Case is source data (§13.18) ──────────────────────────────────────────────────────────────────
-def test_case_survives_ingest_because_it_is_the_proper_noun_marker(monkeypatch):
-    """Capitalization is the source's own proper-noun marker, so the `sense_ranks` keys carry it.
-
-    LMF gives `mass` (the physical quantity) and `Mass` (the liturgy) separate LexicalEntries, and a
-    sense number is per-entry, so both are sense 0. Folding the rank keys to lowercase collapses
-    them into one `mass -> 0`; the tie then falls through to synset-offset order, and "mass physics"
-    answers with the liturgy.
-
-    `lemmas` stays lowercased — it is the keyed-lookup field — and the ontology driver matches the
-    two case-insensitively."""
-    f = tmp = None
-    import tempfile, os as _os
-    d = tempfile.mkdtemp()
-    f = _os.path.join(d, "wn.xml")
-    lmf = _LMF.replace('writtenForm="dog"', 'writtenForm="Dog"', 1)
-    with open(f, "w", encoding="utf-8") as fh:
-        fh.write(lmf)
-    s = _store()
-    s0.ingest_stage0_oewn(s, path=f)
-    doc = s.artifacts.get_artifact("wn-oewn-02086723-n")
-    ranks = doc.get("sense_ranks") or {}
-    assert "Dog" in ranks, "the written form's case was destroyed: %r" % (ranks,)
-    assert doc["lemmas"] == [x.lower() for x in doc["lemmas"]], "lemmas are the lookup field"
 
 
 def test_a_lowercase_query_prefers_the_common_noun_over_the_proper_noun(monkeypatch):

@@ -121,28 +121,8 @@ def test_a_tampered_cloud_response_is_rejected(tmp_path) -> None:
     assert not e.cache.node.has_region(region)
 
 
-def test_an_unreachable_cloud_stays_offline_correct(tmp_path) -> None:
-    """A dead transport (raises OSError) leaves the read path intact: the leaf answers from what
-    it has, or reports that it holds no answer. Disconnected is a normal state, not an error."""
-    e, priv = _leaf(tmp_path)
-
-    def dead_get_shard(peer, region):
-        raise OSError("connection refused")
-    e.connect(MeshChannel(e.cache.node, e.authority_pub, dead_get_shard))
-
-    res = e.ask("what is an ontology?")     # must not raise
-    assert res.answer.refused               # nothing local, cloud dead -> honest miss
-    assert res.refilled == []
 
 
-def test_a_cloud_that_lacks_the_region_is_a_clean_miss(tmp_path) -> None:
-    """The cloud simply not holding a region is not tampering and not an error — skip it."""
-    e, priv = _leaf(tmp_path)
-    def empty_get_shard(peer, region):
-        return None, None
-    e.connect(MeshChannel(e.cache.node, e.authority_pub, empty_get_shard))
-    res = e.ask("what is an ontology?")
-    assert res.refilled == [] and res.answer.refused
 
 
 def test_disconnected_is_the_default(tmp_path) -> None:

@@ -8,6 +8,8 @@ Everything here is deterministic and runs without a live store.
 """
 from __future__ import annotations
 
+import dataclasses
+
 import json as _json
 import sqlite3 as _sqlite3
 
@@ -393,6 +395,32 @@ def _install_offline_wordnet() -> bool:
 
 
 # ── a minimal answerer, for tests that exercise the RUNNER through `ask()` ─────────────────────
+@dataclasses.dataclass
+class _StubAnswer:
+    """The answer shape the stub answerer returns — the three fields ember's read path reads.
+
+    Deliberately not the operator bundle's `Answer`: borrowing that class made ember's suite
+    depend on a chorus payload for a type. Kept minimal, so a field the real answer grows does not
+    silently appear here and make a test pass for the wrong reason.
+    """
+
+    text: str
+    grounded: bool
+    cited: list
+    read: dict = dataclasses.field(default_factory=dict)
+
+    @property
+    def refused(self) -> bool:
+        """`not grounded` — the same rule the operator bundle's `Answer` applies.
+
+        Restated rather than inherited, because inheriting would mean importing the bundle, which
+        is what this stub exists to avoid. Four fields and one property is the whole surface ember's
+        read path reads; `tests/test_the_stub_answer_matches_the_real_one.py` in chorus holds the
+        two together where a payload is present.
+        """
+        return not self.grounded
+
+
 class _StubAnswerer:
     """The smallest thing satisfying what `read_path` calls: `.name` and `.answer(query, evidence)`.
 
@@ -408,10 +436,18 @@ class _StubAnswerer:
     name = "stub"
 
     def answer(self, query, evidence):
-        # `Answer` is the operator bundle's shape rather than ember's: the runner declares neither
-        # the evidence shape nor the type of an answer, so the class is resolved at call time.
-        from ember.runtime.runner import answer as _answer_mod
-        answer_cls = _answer_mod.Answer
+        # The stub returns its OWN answer shape and does not reach for the operator bundle's.
+        #
+        # It used to do `from ember.runtime.runner import answer` to borrow the real `Answer`. That
+        # resolved a sha-verified operator payload — chorus's, distributed — so this fake, and the
+        # 49 tests that reach it, could not run without a chorus checkout. Ember EXECUTES those
+        # payloads at runtime; its own suite must not need them to exercise its own read path, and
+        # a stub that pulls the real type is not a stub in the part that matters.
+        #
+        # That the real `Answer` accepts what ember produces is a claim about the boundary between
+        # ember and an operator bundle. It belongs where a payload is actually present —
+        # `tests/test_runner.py` makes it, and skips when no bundle is reachable.
+        answer_cls = _StubAnswer
 
         # Evidence arrives as rows — `read_path` hands over dicts, not objects. A dict has no
         # `.text`, and `getattr(e, "text", "")` reads empty for every row without saying so, so both

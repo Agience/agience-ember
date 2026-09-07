@@ -57,6 +57,20 @@ HOST_SEAMS: Dict[str, str] = {
     # guarantee there is never shared cognitive state — pooled witnesses turn first-hand memory into
     # hearsay — so it is the runner's by charter, and a persona must be given one.
     "delegate": "ember.runtime.delegate",
+    # ── what a FACET reads off the running engine ───────────────────────────────────────────────
+    #
+    # Facets are chorus's; the engine is ember's. A facet that renders what this node holds needs to
+    # read the engine, and it reaches it HERE rather than by importing ember — the same rule every
+    # other declarer follows, and the one `agience-chorus/src/tests/test_chorus_does_not_import_ember.py`
+    # enforces from the other side.
+    #
+    # These four were added when `ember/facets/browse.py` moved to `aria/facets/`. It had been
+    # importing `ember.genesis`, `ember.runtime.improve`, `ember.surface.stats` and
+    # `ember.runtime.pool` directly, which is what a facet living inside the engine lets you do.
+    "genesis": "ember.genesis",
+    "improve": "ember.runtime.improve",
+    "stats": "ember.surface.stats",
+    "pool": "ember.runtime.pool",
 }
 
 

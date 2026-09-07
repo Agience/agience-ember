@@ -520,101 +520,17 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
             self.wfile.write(body)
 
         def do_GET(self):  # noqa: N802
-            # ── ontology browser (same-origin UI + JSON API) ──
-            if store is not None and (self.path in ("/browse", "/chat", "/", "/status", "/dashboard",
-                                                    "/stats", "/console")
-                                      or self.path.startswith("/facet/")
-                                      or self.path.startswith("/library")
-                                      or self.path.startswith("/api/")):
-                from ember.facets import browse
-                from urllib.parse import urlparse, parse_qs, unquote
-                u = urlparse(self.path)
-                if u.path == "/stats":                      # raw local snapshot (instant; the mesh reads this)
-                    from ember.surface import stats as _stats
-                    self._send(_stats.read_stats(store.keys_dir) or {"error": "no snapshot yet"}); return
-                if u.path == "/dashboard":                  # the mesh dashboard — reads snapshots, never scans
-                    body = browse.dashboard_page(store).encode()
-                    self.send_response(200); self.send_header("content-type", "text/html; charset=utf-8")
-                    self.send_header("content-length", str(len(body))); self.end_headers()
-                    self.wfile.write(body); return
-                if u.path == "/status":
-                    body = browse.status_page(store).encode()
-                    self.send_response(200); self.send_header("content-type", "text/html; charset=utf-8")
-                    self.send_header("content-length", str(len(body))); self.end_headers()
-                    self.wfile.write(body); return
-                if u.path == "/browse":
-                    body = browse.PAGE.encode()
-                    self.send_response(200); self.send_header("content-type", "text/html; charset=utf-8")
-                    self.send_header("content-length", str(len(body))); self.end_headers()
-                    self.wfile.write(body); return
-                if u.path in ("/chat", "/"):
-                    body = browse.CHAT_PAGE.encode()
-                    self.send_response(200); self.send_header("content-type", "text/html; charset=utf-8")
-                    self.send_header("content-length", str(len(body))); self.end_headers()
-                    self.wfile.write(body); return
-                if u.path == "/library":
-                    # The library does not pick the zoom (§9.6) — it offers the levels this corpus
-                    # has, as links — so `resolution` is parsed here and carried through. Reading
-                    # only `refresh` returns the same offer page for every one of those links:
-                    # choices with no way to choose. Declining to pick works only if the caller can.
-                    _q = _urlparse.parse_qs(u.query or "")
-                    refresh = "refresh=1" in (u.query or "")
-                    _res = (_q.get("resolution") or [None])[0]
-                    try:
-                        resolution = float(_res) if _res not in (None, "") else None
-                    except ValueError:
-                        resolution = None          # an unreadable level is no level, not an error
-                    body = browse.library_page(store, refresh=refresh,
-                                               resolution=resolution).encode()
-                    self.send_response(200); self.send_header("content-type", "text/html; charset=utf-8")
-                    self.send_header("content-length", str(len(body))); self.end_headers()
-                    self.wfile.write(body); return
-                # ── the local control console (ember/surface/console.py) ──────────────────────
-                # Read-only here: it renders the node's config, the prisms that have registered,
-                # and each one's live health beside what it once claimed. Running an operator is a
-                # POST and is gated separately — see `/api/console/run`.
-                if u.path == "/console":
-                    from ember.surface import console as _console
-                    body = _console.page(store).encode()
-                    self.send_response(200); self.send_header("content-type", "text/html; charset=utf-8")
-                    self.send_header("content-length", str(len(body))); self.end_headers()
-                    self.wfile.write(body); return
-                # ── facets — a crystal's view, served by the runner that runs the crystal ──────
-                # `/facet/<name>/<path>`; `<name>/` alone serves its `index.html`. Read-only and
-                # ungated: a facet is a public view, and its far side (the tekton it talks to)
-                # carries its own authorization. Serving the view behind a token while the data is
-                # gated separately would put the check on the wrong side of the membrane.
-                if u.path.startswith("/facet/"):
-                    from ember.surface import console as _console
-                    seg = unquote(u.path[len("/facet/"):]).split("/", 1)
-                    fname = seg[0]
-                    rel = seg[1] if len(seg) > 1 else ""
-                    target = _console.facet_file(fname, rel)
-                    if target is None:
-                        # 404 for a traversal attempt too — a 403 would confirm the path exists.
-                        self._send({"error": "no such facet file"}, 404); return
-                    data = target.read_bytes()
-                    self.send_response(200)
-                    self.send_header("content-type", _console.facet_content_type(target))
-                    self.send_header("content-length", str(len(data)))
-                    self.end_headers()
-                    self.wfile.write(data); return
-                if u.path == "/api/console/state":
-                    from ember.surface import console as _console
-                    # `probe=0` skips dialling each host's /health — the page is then a pure store
-                    # read, which is what you want when a host is hanging rather than down.
-                    self._send(_console.state(
-                        store, probe=("probe=0" not in (u.query or "")))); return
-                if u.path == "/api/artifacts":
-                    q = parse_qs(u.query)
-                    self._send(browse.api_artifacts(
-                        store, content_type=(q.get("type", [None])[0] or None),
-                        skip=int(q.get("skip", [0])[0]), limit=min(200, int(q.get("limit", [40])[0])),
-                        lemma=(q.get("lemma", [None])[0] or None))); return
-                if u.path.startswith("/api/artifact/"):
-                    aid = unquote(u.path[len("/api/artifact/"):])
-                    self._send(browse.api_artifact(store, aid)); return
-                self._send({"error": "not found"}, 404); return
+            # ── no facet routes here ──────────────────────────────────────────────────────────
+            #
+            # `/browse`, `/chat`, `/status`, `/dashboard`, `/console`, `/library`, `/facet/*` and
+            # the `/api/*` reads behind them were served from this handler until the facets moved
+            # to `agience-chorus` (`aria/facets/browse.py`). Ember is the workflow engine; a
+            # rendered view of what it holds is a tool, and tools are chorus's.
+            #
+            # The facet reads the engine through host seams — `genesis`, `improve`, `stats`,
+            # `pool`, bound in `ember/runtime/seams.py` — so nothing here has to serve it. What
+            # this handler keeps is the engine's own surface: `/v1/*`, `/health`, host
+            # registration and invoke.
             if self.path.rstrip("/") == "/v1/models":
                 self._send({"object": "list", "data": [
                     {"id": MODEL_ID, "object": "model", "created": CREATED, "owned_by": "agience"}]})

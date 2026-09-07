@@ -70,7 +70,13 @@ def test_importing_EMBER_binds_every_seam_it_fills():
     from ember.runtime.seams import HOST_SEAMS
 
     assert set(HOST_SEAMS) == {"match", "activation", "projection", "delegate",
-                           "forgetting", "optics"}, HOST_SEAMS
+                           "forgetting", "optics",
+                           # what a FACET reads off the running engine. Added when
+                           # `ember/facets/browse.py` moved to `agience-chorus`
+                           # (`aria/facets/browse.py`): facets are chorus's, the engine is ember's,
+                           # and a facet rendering what this node holds reaches it through seams
+                           # instead of importing ember.
+                           "genesis", "improve", "stats", "pool"}, HOST_SEAMS
     bound = prism_runner.registered_seams()
     for name, target in HOST_SEAMS.items():
         assert bound.get(name) == target, (name, bound.get(name), target)
@@ -109,6 +115,13 @@ def test_every_seam_target_ACTUALLY_IMPORTS_and_carries_what_the_declarers_read(
         # entroptics. `astra/reading/` (ingest) and `lumen/reading/` (reasoning) both read the
         # ordered-stream operator and the shuffled control off it.
         "optics": ("sequence_operator", "surrogate_significance", "embed"),
+        # The browse facet's four. Measured at its call sites in `aria/facets/browse.py`, the same
+        # rule as every entry above: this list is what makes a rename land here rather than in a
+        # rendered page that quietly loses a panel.
+        "genesis": ("all_metrics",),
+        "improve": ("metrics_for_status", "trend"),
+        "stats": ("read_mesh_stats", "read_stats"),
+        "pool": ("pool_status",),
     }
     assert set(READ) == set(HOST_SEAMS), "the read-surface list and the seam table disagree"
 

@@ -43,14 +43,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 
 def _load_offer_module():
-    """Load the offer renderer by path from `agience-chorus/src/sage/offer.py`.
+    """Load the offer renderer by path from `agience-chorus/src/agience_chorus/sage/offer.py`.
 
     The renderer lives in chorus: it renders what an artifact advertises, and sage owns
     `op.describe.*`.
 
-    Loading by path rather than `import sage.offer`. Ember does not import chorus (enforced by
-    `tests/test_defect_closure_wiring.py` and `tests/test_reach_wiring.py`), and chorus is not an
-    installed distribution here — `sage/` has no `__init__.py`. This script reaches
+    Loading by path rather than `from agience_chorus.sage import offer`. Chorus IS an installable
+    distribution now (`agience-chorus`, importing as `agience_chorus`), so the import would resolve
+    wherever it happens to be installed — and that is exactly what must not happen here. Ember does
+    not import chorus, enforced by `tests/test_defect_closure_wiring.py` and
+    `tests/test_reach_wiring.py`; loading by path keeps this script reaching one named file rather
+    than acquiring a dependency the tests forbid. This script reaches
     `agience-mantle/src` the same way, a few lines below. The module depends only on `re` and
     `typing`, which is what makes loading it in isolation work.
 
@@ -63,7 +66,8 @@ def _load_offer_module():
     # The repo layout and node 45's deploy layout differ, so both are tried. On 45 the source
     # ships flattened; a path that resolves in only one of the two places this script runs is a
     # latent break either way.
-    cands = [os.path.join(here, "..", "..", "agience-chorus", "src", "sage", "offer.py"),  # repo
+    cands = [os.path.join(here, "..", "..", "agience-chorus", "src", "agience_chorus",
+                          "sage", "offer.py"),                                   # repo
              "/home/builder/genesis/chorus-src/sage/offer.py",                    # 45 deploy
              os.path.join(here, "..", "..", "chorus-src", "sage", "offer.py")]
     path = next((c for c in cands if os.path.exists(c)), None)

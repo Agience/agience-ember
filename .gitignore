@@ -50,9 +50,10 @@ node_modules/
 *.tsbuildinfo
 
 # --- IDE / OS ---
-.vscode/*
-# the Mantle MCP server, tracked deliberately -- agience-build/scripts/mcp_config.py
-!.vscode/mcp.json
+# `.vscode/mcp.json` names an internal Mantle endpoint. It is tracked in no repository,
+# public or private. `agience-build/scripts/mcp_config.py` writes it locally for the
+# editor; it does not enter git.
+.vscode/
 .idea/
 *.swp
 *.swo

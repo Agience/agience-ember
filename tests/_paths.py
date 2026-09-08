@@ -12,8 +12,22 @@ from pathlib import Path
 
 # tests/_paths.py → tests/ → <ember repo> → <workspace root>
 EMBER_REPO = Path(__file__).resolve().parents[1]
-WORKSPACE = Path(__file__).resolve().parents[2]
 EMBER_SRC = EMBER_REPO / "src" / "ember"
+
+#: Where the sibling repositories are. TWO layouts are real and both must work:
+#:
+#:   a developer workspace   <root>/agience-ember, <root>/agience-mantle, …
+#:   CI                      <repo>/.siblings/agience-mantle, …
+#:
+#: `actions/checkout` cannot write outside the workspace, so CI cannot lay siblings out as actual
+#: siblings; it puts them under `.siblings/` instead. A single hard-coded `parents[2]` is right in
+#: one of those and wrong in the other — and wrong LOUDLY, at import, taking collection down for
+#: every module that reads this file.
+#:
+#: So the root is the first candidate that actually holds the marker, rather than a counted depth.
+_MARKER = "agience-mantle"          # a sibling ember depends on directly
+_CANDIDATES = (Path(__file__).resolve().parents[2], EMBER_REPO / ".siblings")
+WORKSPACE = next((c for c in _CANDIDATES if (c / _MARKER).is_dir()), _CANDIDATES[0])
 
 # ── the assertions that make a relocation loud ────────────────────────────────────────────────
 # Each names the marker that proves this module resolved where it thinks it did. A path helper that
@@ -24,9 +38,11 @@ assert (EMBER_SRC / "genesis.py").is_file(), (
 # The workspace marker is `agience-mantle`, a sibling ember depends on directly. A marker must be a
 # repo whose absence means "this path is wrong" rather than one whose absence could also mean "that
 # repo moved" — an archived marker turns this guard into an import failure for every reader.
-assert (WORKSPACE / "agience-mantle").is_dir(), (
-    f"tests/_paths.py: WORKSPACE resolved to {WORKSPACE}, which holds no agience-mantle — this file "
-    f"has been moved and the parents[] depths above are now wrong. Fix them here, once.")
+assert (WORKSPACE / _MARKER).is_dir(), (
+    f"tests/_paths.py: no sibling checkout found. Looked for {_MARKER!r} in "
+    f"{[str(c) for c in _CANDIDATES]}. In a developer workspace the repos are siblings; in CI they "
+    f"are under `.siblings/`, named as they are on the remote. If neither holds it, either this "
+    f"file moved (fix the depths above, once) or the checkout step did not run.")
 
 
 def ember_src(name: str) -> Path:

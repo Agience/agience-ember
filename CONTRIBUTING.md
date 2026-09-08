@@ -1,67 +1,14 @@
 # Contributing to Agience Ember
 
-Ember is the **leaf**: the local touch, present where observation happens. Operationally a cache,
-and **that operational bound is the scope bound** - it holds its own shards, answers from them when
-it can, and reaches the mesh only on a miss.
-
-## Tests
-
-```bash
-pip install -e '.[dev]'
-python -m pytest -q
-```
-
-Every test lives under `tests/`, which `pyproject.toml` sets as the only `testpaths` root.
-
-**The suite needs nothing but this repository.** No sibling checkout, no environment variable, no
-operator payloads — `python -m pytest -q` is the whole command.
-
-Keep it that way. Ember EXECUTES operators at runtime, resolving a group through `prism.runner` and
-running a sha-verified payload, but those payloads are chorus's. A test that needs one is a test
-about an operator, and it belongs in `agience-chorus` beside the operator — 117 of them moved there
-for exactly that reason. What is tested here is the engine: the cache, the read path, the mesh, the
-relay, identity, the ontology coordinate.
-
-The suite is disk-bound and runs about three minutes serially. `pyproject.toml` explains why there
-is no `-n auto` default: two reps per config could not distinguish any worker count from any other.
-
-## Being a cache is the boundary
-
-Ember is a cache with a socket - `prism.host.Host` plus the mesh plus the relay channel. **Personas
-live in chorus, reached over the wire.** Anything that starts to look like a persona implementation
-here is in the wrong repo; move it rather than widening Ember.
-
-A cached shard is exactly as trustworthy as the origin's: content-addressed, authority-signed, and
-verified independently of who served it. **That property is what lets a cache be trusted.** A change
-that accepts a shard on the strength of where it came from will not merge.
-
-## It registers the seams other repos rely on
-
-`ember/runtime/seams.py` registers `match`, `projection`, `optics`, `activation`, `delegate` and
-`forgetting` with `prism.runner`. Mantle's `MANTLE_ONTOLOGY_HOST=ember` names this module so
-Mantle's ranking arm can find them - and **Mantle's static import graph names no ember module**, so
-nothing in a grep of Mantle will warn you.
-
-**Renaming or unregistering a seam silently turns off a ranking arm in another service, with no
-error on either side.** Grep the seam name across the workspace first, and report what you found.
-
-## The architecture rule is not a licence rule
-
-Ember must not import `chorus` or `lumen`. Both are AGPL, same as Ember, so no licence boundary is
-crossed - the rule exists because Ember is the substrate personas reach *into*.
-
 ## Contributing
 
-**Sign the CLA** - Ember is AGPL-3.0-only **or** commercially licensed
+Fork, branch from `main`, sign off every commit (`git commit -s`) to certify the
+[DCO](https://developercertificate.org/), open a PR. Commit format: `fix:` · `feat(scope):` ·
+`docs:` · `test:` · `chore:`.
+
+**Sign the CLA.** This project is AGPL-3.0-only **or** commercially licensed
 ([`COMMERCIAL_LICENSE.md`](COMMERCIAL_LICENSE.md)), so the project must hold the right to relicense
 every line it ships. The bot checks on PR open and links [`CLA.md`](CLA.md).
 
-Fork, branch from `main`, sign off every commit (`git commit -s`), open a PR. Commit format:
-`fix:` / `feat(scope):` / `docs:` / `test:` / `chore:`.
-
-**Security vulnerabilities: do not open a public issue** - email **connect@agience.ai**.
-
-## License
-
-**Dual-licensed: AGPL-3.0-only or commercial.** See [`LICENSE`](LICENSE),
-[`COMMERCIAL_LICENSE.md`](COMMERCIAL_LICENSE.md) and [`NOTICE`](NOTICE).
+Dual-licensed — see [`LICENSE`](LICENSE), [`COMMERCIAL_LICENSE.md`](COMMERCIAL_LICENSE.md),
+[`NOTICE`](NOTICE) and [`CLA.md`](CLA.md).

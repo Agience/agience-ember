@@ -85,9 +85,8 @@ MIN_SAMPLE_MOVED = 1000
 def consolidation_due(tick: int, every: int) -> bool:
     """Is this tick due for the cross-source colimit sweep?
 
-    `every=0` disables the cadence entirely, which is the pre-2026-08-25 behaviour: the sweep then
-    runs only when a stage promotes. Named rather than inlined so the rule can be asserted without
-    standing up a store.
+    `every=0` disables the cadence, leaving a stage promotion as the sweep's only trigger. Named
+    rather than inlined so the rule can be asserted without standing up a store.
     """
     return bool(every) and tick % every == 0
 
@@ -99,8 +98,8 @@ def _tick(bundle, *, ingest: bool = False, consolidate: bool = False) -> dict:
     ingestion by one bounded increment, or promotes it, unattended from an OS process. The ingest
     step runs first so new dark matter is illuminated and measured within the same tick.
 
-    `consolidate=True` runs the cross-source colimit sweep on THIS tick. A promotion still triggers
-    it — that is a good moment — but it is no longer the only one; see the note below."""
+    `consolidate=True` runs the cross-source colimit sweep on this tick. A stage promotion during
+    the ingest step triggers it as well."""
     from ember.runtime import improve
     ingested = consolidated = None
     if ingest:
@@ -114,16 +113,14 @@ def _tick(bundle, *, ingest: bool = False, consolidate: bool = False) -> dict:
                 consolidate = True
         except Exception as e:
             ingested = {"error": str(e)[:200]}
-    # The sweep reads only what is ALREADY in the store — it indexes synsets by keyed word and
+    # The sweep reads only what is already in the store — it indexes synsets by keyed word and
     # matches article titles against them. It has no dependency on an ingest having just happened.
     # Gating it only on a promotion would couple it to remote source reachability: a stage promotes
     # only when every source in it is drained, and a source that cannot be fetched (OEWN 503, an
-    # OMW licence still clearing) defers rather than failing. Measured 2026-08-25 on 71/home: the
-    # sweep had not run since 2026-07-25 and `consolidates` edges were frozen at 11,231, while the
-    # store held far more unconsolidated alignments than that.
-    # The gate itself is not wrong to exist — this is a full-corpus scan and running it every tick
-    # would be waste. So it keeps a bound; what changes is that the bound is its own cadence rather
-    # than someone else's milestone.
+    # OMW licence still clearing) defers rather than failing, so one unreachable remote host would
+    # withhold a sweep over purely local data.
+    # It is a full-corpus scan, so it stays bounded — by its own cadence, which is a bound this
+    # node holds itself.
     if consolidate:
         try:
             from ember import genesis
@@ -230,10 +227,10 @@ def run(*, interval: float = 60.0, max_ticks: Optional[int] = None, ingest: bool
                 # four registrars wrote every one of the 25 rows the invariant reports.
                 reg(bundle, author=_author)
             except Exception as exc:
-                # The swallow stays — a registrar for a persona this node does not carry is a
-                # normal miss — but it is no longer silent. A seal that refuses would otherwise
-                # make the operator catalogue stop being written with nothing said, which is an
-                # invisible capability loss in place of a visible plaintext one.
+                # A registrar for a persona this node does not carry is a normal miss, so the
+                # failure is swallowed rather than raised — and reported, because a seal that
+                # refuses would otherwise stop the operator catalogue being written with nothing
+                # said.
                 # One-line JSON to stdout — this module has no logger and every other report in
                 # it is a `print(json.dumps(...))`. Adding one for a single line would split its
                 # output across two streams the supervisor does not capture the same way.

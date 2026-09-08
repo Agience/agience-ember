@@ -52,27 +52,35 @@ jobs:
       - uses: actions/checkout@v4
       # prism, crystal and mantle are PUBLIC and carry no token line: a token on a public checkout
       # is noise that hides which one actually needs a credential.
+      #
+      # Each `path:` is the repository's OWN name, and that is load-bearing rather than tidy.
+      # `tests/_paths.py` finds the workspace by looking for a directory named `agience-mantle`, and
+      # several tests put a sibling's `src/` on `sys.path` through `repo("agience-mantle")`. A
+      # shortened checkout directory makes that lookup miss — and `sys.path.insert` of a path that
+      # does not exist is a no-op, so the tests would go on passing while measuring nothing.
+      # `.siblings/` rather than true siblings because `actions/checkout` cannot write above the
+      # workspace; `_paths.py` accepts both layouts.
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-prism-py
-          path: .siblings/prism
+          path: .siblings/agience-prism-py
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-crystal
-          path: .siblings/crystal
+          path: .siblings/agience-crystal
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-mantle
-          path: .siblings/mantle
+          path: .siblings/agience-mantle
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install --upgrade pip setuptools
-      - run: pip install './.siblings/prism[trust,vector,wire]' './.siblings/crystal[ontology]' ./.siblings/mantle
+      - run: pip install './.siblings/agience-prism-py[trust,vector,wire]' './.siblings/agience-crystal[ontology]' ./.siblings/agience-mantle
       - run: pip install -e '.[dev]'
       - name: Run the suite
         env:

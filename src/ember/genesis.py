@@ -33,7 +33,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-#: Module logger. There was none, which is why the checkpoint's swallow had nowhere to speak.
+#: Module logger. Fail-soft handlers here log through it rather than swallowing silently.
 _log = logging.getLogger(__name__)
 
 # Content-type discriminators for the seed ontology artifacts. The type system is open,
@@ -357,12 +357,9 @@ WORDNET_CONTENT_TYPE = "text/x-wordnet"
 SOURCE_CONTENT_TYPE = "application/vnd.agience.source+json"
 # One home for the operator content type, and it is `crystal.operator_schema` — the module that
 # defines the operator schema, in a package ember already declares and imports at module scope.
-#
-# This used to read the constant off the `evolution` BUNDLE (`from ember.runtime.runner import
-# evolution`), which resolved a sha-verified chorus payload AT IMPORT to obtain one string. That
-# made `import ember.genesis` fail outright wherever the payloads were absent — a package-level
-# dependency on a distribution artifact, for a constant. The bundles remain the single distribution
-# path for operator CODE; a content type is not code.
+# Taking it from there keeps `import ember.genesis` independent of the chorus bundles: the bundles
+# are the distribution path for operator code, and a content type is not code, so importing this
+# module does not require a sha-verified payload to be present.
 from crystal.operator_schema import OPERATOR_CONTENT_TYPE   # noqa: F401  (re-exported below)
 
 
@@ -427,13 +424,9 @@ def _wal_checkpoint() -> None:
         c.close()
     except Exception as exc:
         # This checkpoint runs three times per ingest (every N bulk batches, after the synset
-        # pass, after the edge pass). A missing module-level `import os`, fixed 2026-08-25, once
-        # left every call here raising `NameError` on `os.path.join`, silently swallowed by
-        # `except Exception: pass` — so the checkpoint had never run, and the docstring's measured
-        # 18 GB WAL is what happens without it.
-        #
-        # Fail-soft is still right — a checkpoint that cannot run must not fail an ingest — but
-        # fail-soft and fail-silent are different things, and only one of them is debuggable.
+        # pass, after the edge pass). Fail-soft: a checkpoint that cannot run must not fail an
+        # ingest. It logs rather than passing, because a checkpoint that never runs leaves the
+        # 18 GB WAL the docstring measures, and a swallowed failure gives that nowhere to speak.
         _log.warning("WAL checkpoint did not run: %s: %s", type(exc).__name__, exc)
 
 

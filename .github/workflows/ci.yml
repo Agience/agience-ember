@@ -80,7 +80,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install --upgrade pip setuptools
-      - run: pip install './.siblings/agience-prism-py[trust,vector,wire]' './.siblings/agience-crystal[ontology]' ./.siblings/agience-mantle
+      # Mantle with the SAME extras the real installer uses --
+      # `agience-observe/package/install/cli/agience.py` installs
+      # `agience-mantle[service,search,s3]`. Installed bare, `mantle.services.content_service`
+      # fails on `import boto3` (the `s3` extra) and takes 4 test files down at collection.
+      # Matching the installer is the point: CI then exercises the dependency set a real node
+      # actually gets, and a divergence in either is a failure rather than a surprise.
+      - run: pip install './.siblings/agience-prism-py[trust,vector,wire]' './.siblings/agience-crystal[ontology]' './.siblings/agience-mantle[service,search,s3]'
       # `optics` too, not just `dev`. This job is the FULL suite and 8 of its test files import
       # `ember.optics`, whose one eager `import entroptics` then fails at collection --
       # ModuleNotFoundError, 8 collection errors, red on every commit. `entroptics` is an extra by

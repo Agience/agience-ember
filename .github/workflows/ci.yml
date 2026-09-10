@@ -75,6 +75,21 @@ jobs:
           repository: ${{ github.repository_owner }}/agience-mantle
           path: .siblings/agience-mantle
 
+      # origin and chorus are siblings too, and were missing. `tests/test_origin.py` imports the
+      # `origin` module, and `test_corpus_mirror_is_byte_identical.py` reads
+      # `.siblings/agience-chorus` directly -- both failed at collection, so neither was measuring
+      # anything. Chorus is checked out but NOT installed: that test compares files on disk, and
+      # installing it would pull seven tektons' dependencies to read a directory.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-origin
+          path: .siblings/agience-origin
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-chorus
+          path: .siblings/agience-chorus
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -86,7 +101,7 @@ jobs:
       # fails on `import boto3` (the `s3` extra) and takes 4 test files down at collection.
       # Matching the installer is the point: CI then exercises the dependency set a real node
       # actually gets, and a divergence in either is a failure rather than a surprise.
-      - run: pip install './.siblings/agience-prism-py[trust,vector,wire]' './.siblings/agience-crystal[ontology]' './.siblings/agience-mantle[service,search,s3]'
+      - run: pip install './.siblings/agience-prism-py[trust,vector,wire]' './.siblings/agience-crystal[ontology]' './.siblings/agience-mantle[service,search,s3]' ./.siblings/agience-origin
       # `optics` too, not just `dev`. This job is the FULL suite and 8 of its test files import
       # `ember.optics`, whose one eager `import entroptics` then fails at collection --
       # ModuleNotFoundError, 8 collection errors, red on every commit. `entroptics` is an extra by

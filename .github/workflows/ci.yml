@@ -81,7 +81,13 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip setuptools
       - run: pip install './.siblings/agience-prism-py[trust,vector,wire]' './.siblings/agience-crystal[ontology]' ./.siblings/agience-mantle
-      - run: pip install -e '.[dev]'
+      # `optics` too, not just `dev`. This job is the FULL suite and 8 of its test files import
+      # `ember.optics`, whose one eager `import entroptics` then fails at collection --
+      # ModuleNotFoundError, 8 collection errors, red on every commit. `entroptics` is an extra by
+      # design (the entroptics-free surface is real), so the base install correctly omits it; the
+      # job that proves that surface is `install-resolves`, which installs the base and passes.
+      # A suite calling itself full while skipping the instrument was testing less than it claimed.
+      - run: pip install -e '.[dev,optics]'
       - name: Run the suite
         env:
           # One thread is the only safe setting in CI: OpenBLAS otherwise faults at exit or hangs.

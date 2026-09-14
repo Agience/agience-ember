@@ -52,23 +52,23 @@ class _Unevaluable(Exception):
 _OSPATH = {"join", "dirname", "abspath", "normpath", "realpath", "expanduser"}
 #: `_paths` attributes that are resolved trees. Anything else on `_paths` is a function or a doc.
 #:
-#: `FLEET_EMBER` is the one entry that may legitimately NOT exist: node 71's operator tooling lives
-#: in `_fleet`, a private sibling checkout, so its absence is an absent dependency rather than a
-#: wrong path — the distinction this whole module draws. It is listed here so the guard can
-#: evaluate it, and `_is_absent_dependency` below is what stops a missing `_fleet` reading as a
-#: defect while keeping a wrong FILE NAME under a present `_fleet` reading as one.
-_PATHS_CONSTANTS = {"EMBER_REPO", "WORKSPACE", "EMBER_SRC", "FLEET_EMBER"}
-_PATHS_CALLS = {"repo", "ember_src", "fleet_ember"}
+#: `NODE_TOOLING` is the one entry that may legitimately NOT exist: node 71's operator tooling lives
+#: in `agience-cloud`, a private sibling checkout, so its absence is an absent dependency rather
+#: than a wrong path — the distinction this whole module draws. It is listed here so the guard can
+#: evaluate it, and `_is_absent_dependency` below is what stops a missing `agience-cloud` reading as
+#: a defect while keeping a wrong FILE NAME under a present `agience-cloud` reading as one.
+_PATHS_CONSTANTS = {"EMBER_REPO", "WORKSPACE", "EMBER_SRC", "NODE_TOOLING"}
+_PATHS_CALLS = {"repo", "ember_src", "node_tooling"}
 
 #: Roots whose absence means "that repository is not checked out", not "this path is wrong".
-_ABSENT_DEPENDENCY_ROOTS = (_paths.FLEET_EMBER,)
+_ABSENT_DEPENDENCY_ROOTS = (_paths.NODE_TOOLING,)
 
 
 def _is_absent_dependency(value) -> bool:
     """True when *value* sits under a root that a checkout would supply.
 
-    Scoped to roots that are THEMSELVES missing. With `_fleet` checked out, a path under it that
-    does not exist is a wrong name and is reported, so this exemption cannot hide a typo.
+    Scoped to roots that are THEMSELVES missing. With `agience-cloud` checked out, a path under it
+    that does not exist is a wrong name and is reported, so this exemption cannot hide a typo.
     """
     candidate = Path(value)
     for root in _ABSENT_DEPENDENCY_ROOTS:
@@ -91,10 +91,34 @@ def _dotted(node):
     return ".".join(reversed(parts))
 
 
+class _Collected(list):
+    """Path-valued elements gathered out of a container constant.
+
+    A module-level constant is sometimes a TABLE rather than a single path — `_MIRRORS` pairs two
+    files with the edits permitted between them. Refusing to evaluate it puts the guard red on a
+    correct module, and skipping it puts the silent pass back. So the container is evaluated
+    element-wise and the path-valued elements are checked individually.
+
+    String LITERALS inside a container are data, not paths: the same table carries code fragments
+    like `logging.getLogger("…")`, which name nothing on disk and are not meant to. An element that
+    is COMPUTED from the module's location is kept, whatever its type, so an `os.path.join(...)`
+    buried in a list is still checked.
+    """
+
+
 def _evaluate(node, module_file, bound):
-    """Value of *node* as a `Path`/`str`, or raise `_Unevaluable`."""
+    """Value of *node* as a `Path`/`str`/`_Collected`, or raise `_Unevaluable`."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
+
+    if isinstance(node, (ast.List, ast.Tuple)):
+        out = _Collected()
+        for el in node.elts:
+            if isinstance(el, ast.Constant):        # a literal in a table is data, not a path
+                continue
+            val = _evaluate(el, module_file, bound)
+            out.extend(val) if isinstance(val, _Collected) else out.append(val)
+        return out
 
     if isinstance(node, ast.Name):
         if node.id == "__file__":
@@ -141,8 +165,8 @@ def _evaluate(node, module_file, bound):
             args = [str(_evaluate(a, module_file, bound)) for a in node.args]
             import os.path as _p
             return getattr(_p, fn)(*args)
-        if dotted in ("_paths.%s" % n for n in _PATHS_CALLS):
-            name = dotted.split(".", 1)[1]
+        if dotted in bound.get("@calls", {}) or dotted in ("_paths.%s" % n for n in _PATHS_CALLS):
+            name = bound.get("@calls", {}).get(dotted) or dotted.split(".", 1)[1]
             args = [_evaluate(a, module_file, bound) for a in node.args]
             try:
                 return getattr(_paths, name)(*args)
@@ -165,6 +189,8 @@ def _is_location_derived(node, bound):
     for sub in ast.walk(node):
         if isinstance(sub, ast.Name) and (sub.id == "__file__" or sub.id in bound):
             return True
+        if isinstance(sub, ast.Call) and _dotted(sub.func) in bound.get("@calls", {}):
+            return True
         if isinstance(sub, ast.Attribute) and _dotted(sub) and \
                 _dotted(sub).startswith("_paths."):
             return True
@@ -180,6 +206,19 @@ def location_derived_paths(module_file: Path):
                      filename=str(module_file))
     bound, found = {}, []
     for stmt in tree.body:                       # module level only — that is where these live
+        # `from _paths import NODE_TOOLING` binds a BARE NAME, which reaches `_is_location_derived`
+        # as a plain `Name` matching neither `__file__` nor a `_paths.` dotted form. Without this
+        # the imported form evades the guard entirely while the attribute form is checked — the
+        # silent pass this module exists to prevent, wearing a different import statement.
+        if isinstance(stmt, ast.ImportFrom) and stmt.module == "_paths":
+            for alias in stmt.names:
+                if alias.name in _PATHS_CONSTANTS:
+                    bound[alias.asname or alias.name] = getattr(_paths, alias.name)
+                elif alias.name in _PATHS_CALLS:
+                    # `repo as _repo` — the resolver reached under a local name. Held under a key
+                    # that is not a valid identifier, so no `Name` can collide with it.
+                    bound.setdefault("@calls", {})[alias.asname or alias.name] = alias.name
+            continue
         if isinstance(stmt, ast.Assign):
             targets = [t.id for t in stmt.targets if isinstance(t, ast.Name)]
         elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.value:
@@ -238,6 +277,26 @@ def test_the_guard_accepts_a_right_path_and_ignores_a_non_path(tmp_path):
     assert all(Path(v).exists() for v, _e in got.values())
 
 
+def test_the_guard_sees_a_path_imported_from__paths_by_name(tmp_path):
+    """`from _paths import NODE_TOOLING` must be checked exactly like `_paths.NODE_TOOLING`.
+
+    The two forms name the same tree and only one used to be visible here: the dotted form is an
+    `ast.Attribute` the trigger recognises, while the imported form is a bare `ast.Name` that
+    matched nothing. A module written in the second form was skipped silently, which is this
+    guard's own failure mode spelled with a different import statement. The control seeds a name
+    that does not exist under the real root, so it can only pass if the import form is resolved.
+    """
+    m = tmp_path / "test_seeded_imported.py"
+    m.write_text("from _paths import NODE_TOOLING\n"
+                 "_LOOP = str(NODE_TOOLING / 'no-such-script.py')\n", encoding="utf-8")
+    got = location_derived_paths(m)
+    assert len(got) == 1 and got[0][0] == "_LOOP", (
+        "the imported form was not picked up at all: %r" % (got,))
+    assert got[0][3] is None, "the guard failed to EVALUATE the imported form: %s" % (got[0][3],)
+    assert not Path(got[0][2]).exists(), (
+        "the seeded name %r exists, so this control proves nothing" % got[0][2])
+
+
 def test_the_guard_refuses_an_idiom_it_cannot_evaluate(tmp_path):
     """An unrecognised location-derived idiom is reported. Passing over it would leave the guard
     green across exactly the constants it could not check — the same silent-pass shape one level
@@ -288,10 +347,14 @@ def test_every_location_derived_path_in_a_test_module_resolves(module):
                 "%s:%d  %s — this guard cannot evaluate %s. Route the path through "
                 "`tests/_paths.py` (EMBER_REPO / WORKSPACE / repo(...) / ember_src(...)), which "
                 "resolves it once and asserts it." % (module.name, lineno, name, err))
-        elif not Path(value).exists() and not _is_absent_dependency(value):
-            bad.append(
-                "%s:%d  %s resolves to %s, which DOES NOT EXIST. That is a wrong path, not an "
-                "absent dependency: no environment change makes it resolve, so any test gated on "
-                "it skips forever and the module reports a silent pass. Use `tests/_paths.py`."
-                % (module.name, lineno, name, value))
+        else:
+            # A container constant is a TABLE of paths, and each path-valued element stands or
+            # falls on its own: one missing entry is the same silent skip as a missing scalar.
+            for item in (value if isinstance(value, _Collected) else [value]):
+                if not Path(item).exists() and not _is_absent_dependency(item):
+                    bad.append(
+                        "%s:%d  %s resolves to %s, which DOES NOT EXIST. That is a wrong path, not "
+                        "an absent dependency: no environment change makes it resolve, so any test "
+                        "gated on it skips forever and the module reports a silent pass. Use "
+                        "`tests/_paths.py`." % (module.name, lineno, name, item))
     assert not bad, "\n".join(bad)

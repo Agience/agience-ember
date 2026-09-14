@@ -30,10 +30,10 @@ import sys
 
 import pytest
 
-from _paths import FLEET_EMBER                                    # noqa: E402
+from _paths import NODE_TOOLING                                    # noqa: E402
 
-# Node 71's operator tooling lives in the `_fleet` sibling, not in this repository.
-_LOOP = str(FLEET_EMBER / "comms-loop.py")
+# Node 71's operator tooling lives in the `agience-cloud` sibling, not in this repository.
+_LOOP = str(NODE_TOOLING / "comms-loop.py")
 
 
 def _load(tmp_root):

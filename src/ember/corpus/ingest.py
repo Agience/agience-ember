@@ -13,6 +13,7 @@ matter that has yet to earn mass — so the cache holds both on one ladder. See
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -377,8 +378,10 @@ def ingest_local(paths=None, *, wordnet: bool = False, wiki_dump: Optional[str] 
                  batch: int = 1000) -> Tuple[Ember, int, str, object]:
     """Stand up a standalone leaf and fill its ontology from any of: file paths (code/docs), WordNet
     (lexical ground truth), a Wikipedia dump (conceptual ground truth). Each item is (id, content,
-    offer); indexing runs on the offer, retrieval on the content. Content-derived anchors, persisted,
-    clean rebuild. Strictly local + deterministic. Returns (ember, n_items, authority, priv)."""
+    offer); indexing runs on the offer, retrieval on the content. The AnchorSet is provisioned, not
+    derived from the corpus — `_require_anchorset` refuses without one, because anchors clustered
+    from whatever this node holds would mint region ids no peer computes. Strictly local +
+    deterministic. Returns (ember, n_items, authority, priv)."""
     import shutil
     s = load_settings(); s.cache_dir.mkdir(parents=True, exist_ok=True)
     emb = embedder or _embedder()
@@ -537,6 +540,48 @@ def ingest_to_store(paths=None, *, wordnet: bool = False, wiki_dump: Optional[st
     return ember, n, store
 
 
+def _offer_text(raw) -> str:
+    """The offer an artifact is indexed by — the caller's description, not the store's mint record.
+
+    The raw context is not the offer. Mantle stamps a context onto every create
+    (`artifacts_router._mint_context`) and keeps the caller's own "verbatim under `caller`", so an
+    artifact written through the API stores something like:
+
+        {"minted_by": "mantle.mint_context", "minted": {"at": ..., "principal_id": ...},
+         "addressing": {...}, "provenance": "unknown", "caller": {THE ACTUAL DESCRIPTION}}
+
+    Handing that whole string to `emb.encode` makes the retrieval vector encode a principal UUID
+    and a timestamp instead of what the artifact is about.
+
+    Measured against `/opt/agience/brain/lattice.db`, which is this node's store
+    (`EMBER_SQLITE_DIR=/opt/agience/brain` — ember and mantle share it): **129 of 196 artifacts
+    with a context would be indexed by their mint record**, including every website lead. Latent
+    rather than live: the index is only rebuilt on demand, so an unflattened context first shows up
+    at the next `rebuild_index_from_store`, which is exactly when nobody is looking for it.
+
+    Both shapes are live. A `PATCH` does not mint and pre-mint artifacts were never minted, so 67
+    of those contexts are the caller's own at the top level. An artifact with no `caller` block is
+    returned unchanged.
+
+    Returns text, not a dict: `emb.encode` takes strings. A dict is re-serialised rather than
+    str()'d so the offer stays JSON rather than becoming Python-repr with single quotes.
+    """
+    if not raw:
+        return ""
+    parsed = raw
+    if isinstance(parsed, str):
+        try:
+            parsed = json.loads(parsed)
+        except (ValueError, TypeError):
+            return raw          # an opaque, non-JSON context IS the caller's own text
+    if not isinstance(parsed, dict):
+        return raw if isinstance(raw, str) else ""
+    caller = parsed.get("caller")
+    if not isinstance(caller, dict) or not caller:
+        return raw if isinstance(raw, str) else json.dumps(parsed)
+    return json.dumps(caller)
+
+
 def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Optional[AnchorSet] = None, batch: int = 1000):
     """The store is the source of truth: deletes the Ember index and regenerates it purely from the
     durable artifacts (embeds their contexts/offers, rebuilds the cache). Anchors are provisioned
@@ -556,7 +601,7 @@ def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Op
     for a in store.artifacts.list_artifacts(state="committed"):
         if a.get("content_type") == ops.OPERATOR_CONTENT_TYPE:  # skip operator artifacts in the retrieval index
             continue
-        offer = a.get("context") or ""
+        offer = _offer_text(a.get("context"))
         content = (a.get("content") or "").encode("utf-8")
         rows.append((a["id"], content, offer))
         # preserves the stored rung; see the put loop below.

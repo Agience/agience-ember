@@ -36,7 +36,7 @@ def store():
 def alice(store):
     """An authenticated delegate — real person and real origin (SYSTEM-kind signals)."""
     delegate.reset_cache()
-    return delegate.Delegate.get(store, person="alice@x.com", id="d.alice",
+    return delegate.Delegate.get(store, person="alice@example.com", id="d.alice",
                                  origin="https://agience.ai", restore=False)
 
 
@@ -51,7 +51,7 @@ def test_seal_stamps_the_provenance_quadruple(alice):
     sig = signal.seal(alice, to="op.host.gw.x", seeds={"wolf.n.01": 1.0})
     assert set(sig["from_"]) == {"origin", "person", "host", "observer"}
     assert sig["from_"]["observer"] == "d.alice"
-    assert sig["from_"]["person"] == "alice@x.com"
+    assert sig["from_"]["person"] == "alice@example.com"
     assert sig["content_type"] == signal.SIGNAL_CONTENT_TYPE
     assert sig["signature"] and sig["signed_by"]
 
@@ -223,9 +223,9 @@ def test_a_signal_carrying_another_persons_private_content_is_refused(alice, sto
     Private is a grant: the content is grounded in bob's gated collection rather than marked by a
     flag."""
     from mantle.db import access
-    access.mint_owner_read_grant(store, "private.bob@x.com", "bob@x.com")   # bob's grant gates it
+    access.mint_owner_read_grant(store, "private.bob@example.com", "bob@example.com")   # bob's grant gates it
     sig = signal.seal(alice, to="a", claimed="observed")
-    sig["content"] = {"id": "secret", "collection_id": "private.bob@x.com", "content": "bob's diary"}
+    sig["content"] = {"id": "secret", "collection_id": "private.bob@example.com", "content": "bob's diary"}
     r = signal.route(alice, sig, store=store)
     assert r["delivered"] is False and "field" in r["reason"].lower()
 
@@ -239,14 +239,14 @@ def test_a_pure_activation_is_always_within_the_field(alice, store, _wn):
 
 # ── INVARIANT 5: P3 — an arriving signal is delivered rather than left inert ──────────────────
 def test_deliver_routes_a_signal_addressed_to_this_observer(alice, store, _wn):
-    bob = delegate.Delegate.get(store, person="bob@x.com", id="d.bob", restore=False)
+    bob = delegate.Delegate.get(store, person="bob@example.com", id="d.bob", restore=False)
     sig = signal.seal(alice, to="d.bob", seeds={"wolf.n.01": 1.0})
     r = signal.deliver(bob, [sig], store=store)
     assert r["delivered"] == 1 and r["signals"][0]["regime"] in (signal.MESSAGE, signal.EVENT)
 
 
 def test_deliver_skips_signals_for_other_observers(alice, store, _wn):
-    carol = delegate.Delegate.get(store, person="carol@x.com", id="d.carol", restore=False)
+    carol = delegate.Delegate.get(store, person="carol@example.com", id="d.carol", restore=False)
     sig = signal.seal(alice, to="d.bob", seeds={"wolf.n.01": 1.0})   # addressed to bob, not carol
     r = signal.deliver(carol, [sig], store=store)          # carol is not the addressee
     assert r["delivered"] == 0 and r["skipped"] == 1
@@ -258,14 +258,14 @@ def test_deliver_skips_the_delegates_own_signals_echo_guard():
     from _fakes import _FakeStore as _S
     import tempfile
     s = _S(); s.keys_dir = tempfile.mkdtemp(); delegate.reset_cache()
-    a = delegate.Delegate.get(s, person="a@x.com", id="d.a", origin="https://agience.ai", restore=False)
+    a = delegate.Delegate.get(s, person="a@example.com", id="d.a", origin="https://agience.ai", restore=False)
     own = signal.seal(a, to="d.a", seeds={"wolf.n.01": 1.0})   # addressed to self
     r = signal.deliver(a, [own], store=s)
     assert r["delivered"] == 0 and r["skipped"] == 1
 
 
 def test_deliver_ignores_non_signal_artifacts(alice, store, _wn):
-    bob = delegate.Delegate.get(store, person="bob@x.com", id="d.bob", restore=False)
+    bob = delegate.Delegate.get(store, person="bob@example.com", id="d.bob", restore=False)
     batch = [{"id": "x", "content_type": "text/markdown"},
              signal.seal(alice, to="d.bob", seeds={"wolf.n.01": 1.0})]
     r = signal.deliver(bob, batch, store=store)
@@ -273,7 +273,7 @@ def test_deliver_ignores_non_signal_artifacts(alice, store, _wn):
 
 
 def test_a_broadcast_reaches_everyone(alice, store, _wn):
-    bob = delegate.Delegate.get(store, person="bob@x.com", id="d.bob", restore=False)
+    bob = delegate.Delegate.get(store, person="bob@example.com", id="d.bob", restore=False)
     sig = signal.seal(alice, to="*", seeds={"wolf.n.01": 1.0})
     assert signal.addressed_to(sig, bob) is True
     assert signal.deliver(bob, [sig], store=store)["delivered"] == 1

@@ -175,7 +175,7 @@ def write_stats(store) -> Dict[str, Any]:
 _RATE_MAX_MISSED_CYCLES = 3
 
 # Used when no gate has been published, i.e. when there is no declared cadence to read. It tracks
-# `_fleet/peers/71/ember/health-loop.py`'s own `--fast` default, because that loop is the sole publisher of these
+# `agience-cloud/node/health-loop.py`'s own `--fast` default, because that loop is the sole publisher of these
 # snapshots. If health-loop's default changes, this changes with it: it restates the publisher's
 # cadence rather than making an independent judgement about sampling.
 _UNDECLARED_PUBLISH_CADENCE_S = 30.0

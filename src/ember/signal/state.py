@@ -36,7 +36,7 @@ bytes, and every one is read rather than typed:
                               distinct from a measured 0.
   · the free-space floor      `mantle.db.content_cache._min_free_bytes()` — the store's own
                               reader of the declared policy (`EMBER_CACHE_MIN_FREE_GB=20` in
-                              `_fleet/peers/71/ember/serve.env`: *"evict LRU content to keep >=20GB
+                              `agience-cloud/node/serve.env`: *"evict LRU content to keep >=20GB
                               free on D:; content is durable in S3 / re-ingestable"*). An unset
                               policy yields 0, so no declared floor means no shortfall and the
                               headroom row stays silent.

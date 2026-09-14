@@ -17,8 +17,6 @@ licence is the GNU Affero GPL v3.0 (`agience-ember/LICENSE`).
 """
 from __future__ import annotations
 
-import urllib.parse as _urlparse
-
 import json
 import os
 import secrets as _secrets
@@ -242,7 +240,7 @@ def _reach_route(store, ember, query: str, k: int = 6):
         # ran for 794 s of CPU without returning, against 7.4 s for the same question routed through
         # `reach_provider.respond_handler`.
         #
-        # The resolver the launcher hands in comes first. `_fleet/peers/71/ember/live_node.py` injects
+        # The resolver the launcher hands in comes first. `agience-cloud/node/live_node.py` injects
         # `{"resolve": …, "fabric": None}` because the node's real transport is a store-and-forward
         # `StoreCarrier`, which has no `subscribe` and therefore cannot be a `fabric=`. Reaching with
         # `fabric=carrier["fabric"]` would pass `fabric=None` and skip the resolver entirely. Same
@@ -467,7 +465,7 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
         # No background loop is started here, and each of the four that could be is placed
         # elsewhere for a measured reason:
         #
-        #   * Publishing belongs to `_fleet/peers/71/ember/health-loop.py`. A second publisher is not redundancy:
+        #   * Publishing belongs to `agience-cloud/node/health-loop.py`. A second publisher is not redundancy:
         #     both call `stats.write_stats`, which read-modify-writes the shared `stats.prev`
         #     differencing record, so two unsynchronized 20s/30s loops interleave read and write and
         #     each differences against a sample the other just overwrote — rates computed from
@@ -539,14 +537,6 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
                 if u.path == "/stats":                      # raw local snapshot (instant; the mesh reads this)
                     from ember.surface import stats as _stats
                     self._send(_stats.read_stats(store.keys_dir) or {"error": "no snapshot yet"}); return
-                    # choices with no way to choose. Declining to pick works only if the caller can.
-                    _q = _urlparse.parse_qs(u.query or "")
-                    refresh = "refresh=1" in (u.query or "")
-                    _res = (_q.get("resolution") or [None])[0]
-                    try:
-                        resolution = float(_res) if _res not in (None, "") else None
-                    except ValueError:
-                        resolution = None          # an unreadable level is no level, not an error
                 # ── the local control console (ember/surface/console.py) ──────────────────────
                 # Read-only here: it renders the node's config, the prisms that have registered,
                 # and each one's live health beside what it once claimed. Running an operator is a

@@ -54,7 +54,7 @@ def coords(monkeypatch):
 @pytest.fixture()
 def node(tmp_path, monkeypatch):
     """A store root with a lattice file, and a declared floor read from the environment, which is
-    where the deployed policy lives (`_fleet/peers/71/ember/serve.env`: keep >=20GB free on D:)."""
+    where the deployed policy lives (`agience-cloud/node/serve.env`: keep >=20GB free on D:)."""
     (tmp_path / "lattice.db").write_bytes(b"x" * 4096)
     (tmp_path / "cas").mkdir()
     (tmp_path / "cas" / "aa").mkdir()

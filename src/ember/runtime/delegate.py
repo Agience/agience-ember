@@ -45,7 +45,7 @@ own id is not a provenance term: trust does not depend on *which* of your delega
 something, while cognition does.
 
 The word "origin" carries two senses in the workspace. `Delegate.origin` is the authority. `_origin`
-on a stored row — `mantle/mesh/sync.py`, `_fleet/peers/71/ember/_sqlite_db.py` — is the authoring node
+on a stored row — `mantle/mesh/sync.py`, `agience-cloud/node/_sqlite_db.py` — is the authoring node
 (`EMBER_NODE_ID`).
 """
 from __future__ import annotations

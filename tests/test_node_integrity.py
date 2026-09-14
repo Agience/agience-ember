@@ -1,15 +1,16 @@
 """Node integrity suite — `node-repair.py`'s golden invariants, as a named pytest suite.
 
-`_fleet/peers/71/ember/node-repair.py` is the node's test suite (standing rule 1): it asserts the lattice store's
+`agience-cloud/node/node-repair.py` is the node's test suite (standing rule 1): it asserts the lattice store's
 integrity invariants and is run after every DB change. It is a hyphenated standalone `main()`
 program, which suits an operator CLI but leaves it unimportable, uncollectable by pytest, and named
 unlike a test. This file is the same checks repackaged so `pytest` runs them in the gate. It adds
 no logic and softens no check: every assertion delegates to a `node-repair` check function and
 fails exactly when that check records FAIL, so a failure here is the DB to fix.
 
-`_fleet/peers/71/ember/node-repair.py` remains the manual entry point (`python node-repair.py [--fix]
-[--sqlite PATH] ...`) and the program `_fleet/peers/71/ember/health-loop.py` shells out to; `_fleet/peers/71/ember/run-serve.sh` and
-`_fleet/peers/71/ember/serve.env` reference it at that exact path. This suite is the collectable twin beside it.
+`agience-cloud/node/node-repair.py` remains the manual entry point (`python node-repair.py [--fix]
+[--sqlite PATH] ...`) and the program `agience-cloud/node/health-loop.py` shells out to. The node's
+environment file names it as `node/node-repair.py`, relative to that directory, so the two travel
+together. This suite is the collectable twin beside it.
 
 Two layers:
   * Adversarial (always runs, no substrate needed): builds tiny throwaway stores and shows each
@@ -33,9 +34,9 @@ import pytest
 
 # ---------------------------------------------------------------- locate the standalone programs
 _HERE = os.path.dirname(os.path.abspath(__file__))
-import _paths                      # noqa: E402  (puts src/ on the path, and locates _fleet)
+import _paths                      # noqa: E402  (puts src/ on the path, and locates the node tooling)
 
-_NODE = str(_paths.FLEET_EMBER)   # node 71's operator tooling, in the `_fleet` sibling
+_NODE = str(_paths.NODE_TOOLING)  # node 71's operator tooling, in the `agience-cloud` sibling
 # node-repair's mantle-optional checks (seq accounting cross-check, counter drift, lexical index,
 # tail verdict) import `mantle.db`; make it resolvable the way the deployed PYTHONPATH does
 # so those checks reach their real implementation instead of taking the honest-SKIP fallback.

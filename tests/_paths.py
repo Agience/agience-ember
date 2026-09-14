@@ -84,29 +84,31 @@ def repo(name: str) -> Path:
     return p
 
 
-#: Where node 71's ember operator tooling lives. It was `agience-ember/node/` until it moved to the
-#: fleet tree, which is where per-box operations belong: those files name one node's id, principal,
-#: bucket and endpoint, and none of that is product.
-FLEET_EMBER = WORKSPACE / "_fleet" / "peers" / "71" / "ember"
+#: Where node 71's ember operator tooling lives. It was `agience-ember/node/`, then
+#: `_fleet/peers/71/ember/`; it now sits in `agience-cloud/node/`, the repo that already carries the
+#: node operational surface. `serve.env` travels with it: `run-serve.sh` sources the env file as a
+#: SIBLING, so splitting the two leaves the launcher exiting before it starts anything.
+NODE_TOOLING = WORKSPACE / "agience-cloud" / "node"
 
 
-def fleet_ember(name: str) -> Path:
-    """One of node 71's operator scripts — `fleet_ember("node-repair.py")`.
+def node_tooling(name: str) -> Path:
+    """One of node 71's operator scripts — `node_tooling("node-repair.py")`.
 
-    Raises `FileNotFoundError` when `_fleet` is not checked out, and callers turn that into a skip.
-    That skip is honest in a way the old one was not: `_fleet` is a private sibling, so its absence
-    is a real absent dependency that an environment change fixes. The path this replaced pointed
-    inside this repository at a directory that no longer exists, which no environment change fixes
-    — the distinction `test_no_test_module_skips_on_a_wrong_path.py` exists to draw, and the test
-    that caught this move.
+    Raises `FileNotFoundError` when `agience-cloud` is not checked out, and callers turn that into a
+    skip. That skip is honest in a way the old one was not: `agience-cloud` is a private sibling, so
+    its absence is a real absent dependency that an environment change fixes. The path this replaced
+    pointed inside this repository at a directory that no longer exists, which no environment change
+    fixes — the distinction `test_no_test_module_skips_on_a_wrong_path.py` exists to draw, and the
+    test that caught this move.
     """
-    if not FLEET_EMBER.is_dir():
+    if not NODE_TOOLING.is_dir():
         raise FileNotFoundError(
-            f"{FLEET_EMBER} does not exist — node 71's operator tooling lives in the `_fleet` "
-            f"repository, a private sibling checkout. Tests that read those scripts skip without it.")
-    p = FLEET_EMBER / name
+            f"{NODE_TOOLING} does not exist — node 71's operator tooling lives in the "
+            f"`agience-cloud` repository, a private sibling checkout. Tests that read those scripts "
+            f"skip without it.")
+    p = NODE_TOOLING / name
     if not p.is_file():
         raise FileNotFoundError(
-            f"{p} does not exist. `_fleet` is checked out, so this is a wrong name rather than an "
-            f"absent dependency: {sorted(q.name for q in FLEET_EMBER.iterdir())}")
+            f"{p} does not exist. `agience-cloud` is checked out, so this is a wrong name rather "
+            f"than an absent dependency: {sorted(q.name for q in NODE_TOOLING.iterdir())}")
     return p

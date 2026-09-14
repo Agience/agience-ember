@@ -1553,7 +1553,7 @@ def published_gate(store) -> Optional[Dict[str, Any]]:
     """The health-loop's published golden-gate verdict (node-repair, the real suite), or None.
 
     serve reads what the standing gate published — `golden.json`, written atomically by
-    _fleet/peers/71/ember/health-loop.py next to stats.json — rather than probing node health itself. The record
+    agience-cloud/node/health-loop.py next to stats.json — rather than probing node health itself. The record
     carries its own cadences, so staleness is derived from the publisher's declared schedule rather
     than from a constant chosen here: the loop is single-threaded, so the longest honest gap between
     publishes is one slow interval plus one full golden timeout. Older than that means the gate

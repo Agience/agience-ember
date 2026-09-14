@@ -49,10 +49,11 @@ _REPO = _paths.EMBER_REPO
 # Every tree ember ships or runs: the library, the operator tooling, and this suite itself. A scan
 # restricted to `src/` leaves the scripts unread, and those are where wire imports survived longest.
 #
-# `node/` was a fourth entry until node 71's operator tooling moved to `_fleet/peers/71/ember/`.
+# `node/` was a fourth entry until node 71's operator tooling left this repo; it now lives in
+# `agience-cloud/node/`.
 # It is not listed as a workspace path here on purpose: this scan is about what THIS repository
 # ships, and a scan that silently covers zero files in a directory nobody checked out reads as a
-# pass. The fleet tree is checked where it lives.
+# pass. That tree is checked where it lives.
 _TREES = ("src", "scripts", "tests")
 
 

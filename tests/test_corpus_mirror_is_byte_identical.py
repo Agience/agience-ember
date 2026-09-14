@@ -69,16 +69,16 @@ _CHORUS = _repo("agience-chorus")
 _MIRRORS = [
     (
         _EMBER / "src" / "ember" / "corpus" / "fts.py",
-        _CHORUS / "src" / "corpus_fts.py",
+        _CHORUS / "src" / "agience_chorus" / "corpus_fts.py",
         [('logging.getLogger("ember.corpus.fts")',
           'logging.getLogger("chorus.corpus_fts")',
           'logging.getLogger("<mirror>")')],
     ),
     (
         _EMBER / "src" / "ember" / "ontology" / "corpus_stats.py",
-        _CHORUS / "src" / "corpus_stats.py",
+        _CHORUS / "src" / "agience_chorus" / "corpus_stats.py",
         [("from ember.corpus import fts as _fts",
-          "import corpus_fts as _fts",
+          "import agience_chorus.corpus_fts as _fts",
           "import _mirror_fts as _fts")],
     ),
 ]

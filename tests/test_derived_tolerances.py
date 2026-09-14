@@ -287,7 +287,7 @@ def test_the_absurd_ic_guard_still_catches_the_sentinel_and_passes_real_values()
 def test_the_index_gate_verdict_reads_the_attempt_count_it_loops_on():
     """The verdict compares against the same symbol the loop ranges over, so raising the loop
     bound keeps the BAD branch reachable."""
-    path = str(_paths.FLEET_EMBER / "node-repair.py")
+    path = str(_paths.NODE_TOOLING / "node-repair.py")
     if not os.path.exists(path):
         pytest.skip("node-repair.py not present")
     src = open(path, encoding="utf-8").read()
@@ -302,7 +302,7 @@ def test_the_index_gate_attempt_count_is_what_the_loop_actually_runs():
     `short` equal to the value the verdict compares against."""
     import ast
 
-    path = str(_paths.FLEET_EMBER / "node-repair.py")
+    path = str(_paths.NODE_TOOLING / "node-repair.py")
     if not os.path.exists(path):
         pytest.skip("node-repair.py not present")
     tree = ast.parse(open(path, encoding="utf-8").read())

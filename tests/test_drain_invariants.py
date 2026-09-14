@@ -331,7 +331,7 @@ def test_an_unreadable_data_volume_does_not_collapse_the_cache_cap():
 
 # ── exactly one publisher ─────────────────────────────────────────────────────────────────────
 def test_serve_does_not_run_a_second_stats_publisher():
-    """`_fleet/peers/71/ember/health-loop.py` owns publishing, and serve runs no second publisher.
+    """`agience-cloud/node/health-loop.py` owns publishing, and serve runs no second publisher.
 
     Both would call `write_stats`, which read-modify-writes the shared `stats.prev` differencing
     record, so two unsynchronized loops difference against samples the other just overwrote. A copy

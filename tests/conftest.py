@@ -70,13 +70,35 @@ import pytest as _pytest
 
 @_pytest.fixture(autouse=True, scope="session")
 def _suite_store_environment(tmp_path_factory):
-    """Give the whole suite a store identity and a keys directory of its own."""
+    """Give the whole suite a store identity, a keys directory and a shard of its own."""
     mp = _pytest.MonkeyPatch()
-    keys = tmp_path_factory.mktemp("suite-keys")
+    root = tmp_path_factory.mktemp("suite-shard")
+    keys = root / "keys"
+    keys.mkdir()
+
     # `(_origin, _seq)` is the store's only version identity, so the origin has to be stable across
     # the session rather than per-test: a value that changed between tests would fork this
     # observer's proper time inside a single run.
     mp.setenv("EMBER_NODE_ID", "test-node")
     mp.setenv("EMBER_STORE_KEYS_DIR", str(keys))
+
+    # ⚠ THE SHARD TOO, BECAUSE A TEST CAN REACH ONE WITHOUT ASKING FOR IT. `test_compose_answer.py`
+    # builds its own lattice at `tmp_path` and passes it in explicitly — and still failed here,
+    # because `ontology.activation.compose()` resolves the DEFAULT store on its own. An explicit
+    # subject does not mean nothing else opens a store, which is why this belongs in the session
+    # floor rather than in the three modules that had each already discovered it separately
+    # (`test_console`, `test_invoke_remote_dispatch`, `test_transducer` all set these themselves).
+    #
+    # ⛔ `EMBER_SQLITE_CREATE` IS THE DELIBERATE BOOTSTRAP THE STORE ASKS FOR, and it is safe ONLY
+    # because the directory above is a fresh temp one. `open_lattice` creates-or-opens, so this flag
+    # against a real `EMBER_SQLITE_DIR` is exactly the mistake the store refuses in order to
+    # prevent — minting an empty shard that reports `ready() == True` while serving nothing. Set it
+    # here, next to the temp path that makes it harmless, and never as an ambient export.
+    #
+    # Nothing in this suite asserts the refusal itself (checked 2026-09-16), so providing a store
+    # cannot mask a test that exists to see it refused.
+    mp.setenv("EMBER_SQLITE_DIR", str(root))
+    mp.setenv("EMBER_SQLITE_DB", "lattice.db")
+    mp.setenv("EMBER_SQLITE_CREATE", "1")
     yield
     mp.undo()

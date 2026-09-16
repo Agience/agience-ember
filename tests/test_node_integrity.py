@@ -128,6 +128,20 @@ def _exec(path, *statements):
     con.close()
 
 
+def _one(path, query):
+    """The first column of the first row, or None. For reading a counter back after a repair.
+
+    Opened read-write like `_exec` rather than read-only: these stores are built in `tmp_path` for
+    one test, and a second connection mode is a second thing that can differ from what the check
+    under test sees."""
+    con = sqlite3.connect(path)
+    try:
+        row = con.execute(query).fetchone()
+        return row[0] if row else None
+    finally:
+        con.close()
+
+
 # ================================================================ Adversarial layer (always runs)
 # Each test shows the packaged check passes a clean store and fails the exact corruption it exists
 # to catch. These need no built substrate, so the gate exercises real checks even with no node.
@@ -419,3 +433,80 @@ def test_a_row_removed_outside_the_write_path_is_caught(nr, sdb, tmp_path):
         "defect: %r" % rows)
     assert any("LOST" in (d or "") for _n, _s, d in rows),         "the failure must say the rows are lost, not merely that two numbers differ: %r" % rows
     db2.close()
+
+
+def test_the_repair_reclassifies_lost_rows_rather_than_resetting_the_counter(nr, sdb, tmp_path):
+    """`reanchor_seq_counters_sqlite` brings the invariant back by moving rows -> vacated.
+
+    The distinction is the whole point. Setting `rows` to the scan and stopping would make
+    `live_rows + vacated == last_seq` fail by exactly as much as before; zeroing a counter or
+    lowering `last_seq` would make the arithmetic agree while destroying the evidence of how many
+    rows left. Reclassifying the shortfall as VACATED says what actually happened -- a removal
+    nobody recorded -- and `schema.c_vacated` exists to carry exactly that.
+    """
+    try:
+        from mantle.db import open_lattice
+    except Exception as exc:            # pragma: no cover -- a broken harness, not a valid state
+        raise AssertionError("mantle.db must be importable (%s: %s)" % (type(exc).__name__, exc))
+
+    path = str(tmp_path / "reanchor.db")
+    L = open_lattice(path, origin="test-node")
+    for i in range(8):
+        L.artifacts.put_artifact({"id": "a%04d" % i, "content_type": "text/markdown", "content": "x"})
+    L.db.close() if hasattr(L.db, "close") else None
+
+    _exec(path, "DELETE FROM vertex WHERE id IN ('a0003', 'a0004')")   # two rows, unaccounted
+
+    db = sdb.SqliteDb(path, origin="test-node")
+    assert _fails(nr, _run(nr, nr.check_seq_accounting_agrees, db, "test-node")), (
+        "the seeded loss must be visible before the repair, or this test proves nothing")
+
+    # None, not 0, on a store that has never vacated anything: the counter row does not exist
+    # until something creates it, which is why the repair UPSERTs rather than UPDATEs.
+    before = _one(path, "SELECT n FROM counter WHERE name = 'vacated:test-node'") or 0
+    _run(nr, nr.reanchor_seq_counters_sqlite, db, {"base": str(tmp_path)})
+    after_rows = _one(path, "SELECT n FROM counter WHERE name = 'rows:test-node'")
+    after_vac = _one(path, "SELECT n FROM counter WHERE name = 'vacated:test-node'")
+    live = _one(path, "SELECT COUNT(_seq) FROM ("
+                      "  SELECT _seq FROM vertex WHERE _origin = 'test-node'"
+                      "  UNION SELECT _seq FROM edge WHERE _origin = 'test-node')")
+
+    assert after_rows == live, (
+        "`rows` must equal the rows that exist after a re-anchor: counter=%s scan=%s"
+        % (after_rows, live))
+    assert after_vac == before + 2, (
+        "the two removed seqs must be RECLASSIFIED as vacated, not discarded: %s -> %s"
+        % (before, after_vac))
+    assert not _fails(nr, _run(nr, nr.check_seq_accounting_agrees, db, "test-node")), (
+        "the cross-check must pass once the shortfall is accounted for")
+    db.close()
+
+
+def test_the_repair_leaves_a_peer_alone(nr, sdb, tmp_path):
+    """A peer's shortfall is replication lag, not loss, and re-anchoring it would erase in-flight state.
+
+    `last_seq` for a peer is a high-water mark learned from whatever arrived while the rows behind it
+    are still coming. `is_local` in `seq_counter` is what separates the two, and a repair that
+    ignored it would quietly declare every healthy peer's lag to be vacated rows.
+    """
+    try:
+        from mantle.db import open_lattice
+    except Exception as exc:            # pragma: no cover
+        raise AssertionError("mantle.db must be importable (%s: %s)" % (type(exc).__name__, exc))
+
+    path = str(tmp_path / "peer.db")
+    L = open_lattice(path, origin="test-node")
+    for i in range(4):
+        L.artifacts.put_artifact({"id": "b%04d" % i, "content_type": "text/markdown", "content": "x"})
+    L.db.close() if hasattr(L.db, "close") else None
+
+    # A peer that has announced more than it has delivered: the healthy, ordinary case.
+    _exec(path, "INSERT INTO seq_counter(origin, last_seq, is_local) VALUES('peer-9', 500, 0)")
+    _exec(path, "INSERT INTO counter(name, n) VALUES('rows:peer-9', 400)")
+
+    db = sdb.SqliteDb(path, origin="test-node")
+    _run(nr, nr.reanchor_seq_counters_sqlite, db, {"base": str(tmp_path)})
+    assert _one(path, "SELECT n FROM counter WHERE name = 'rows:peer-9'") == 400, (
+        "a PEER's counter must not be re-anchored -- its shortfall is lag, and rewriting it "
+        "destroys the record of what has not arrived yet")
+    db.close()

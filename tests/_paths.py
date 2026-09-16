@@ -84,6 +84,46 @@ def repo(name: str) -> Path:
     return p
 
 
+#: Repos whose ON-DISK SPELLING differs between the two layouts, longest-lived first.
+#:
+#: ⛔ `agience-prism` IS ONE REPOSITORY WITH THREE LANGUAGE SUBTREES (`c/`, `js/`, `py/`), and only
+#: the Python one is published — as its own distribution named `agience-prism-py`. So a developer
+#: workspace holds `agience-prism/py/src` while `actions/checkout` of the published repo lands
+#: `agience-prism-py/src`. The same source, two spellings, and a single hard-coded one is wrong in
+#: exactly one of the two places this suite runs.
+#:
+#: Measured 2026-09-16: `test_one_instrument.py` declared `agience-prism/py` and failed on the
+#: runner with "declared in _REPOS but has no `src/` on disk" — correctly, because under that name
+#: it does not. The guard was right and the path was the thing that needed to move.
+_SPELLINGS = {
+    "agience-prism/py": ("agience-prism/py", "agience-prism-py"),
+}
+
+
+def repo_src(label: str) -> Path | None:
+    """`<repo>/src` for a declared repo label, in whichever layout is on disk — or None.
+
+    None rather than a raise, because the callers are checks that must be able to SAY a repo is
+    missing. `repo()` raises for the callers that cannot proceed without one; this is for the ones
+    whose whole job is to report the absence, and they must not be taken down by it before they can.
+
+    ⚠ EVERY CANDIDATE ROOT, NOT JUST `WORKSPACE`. `WORKSPACE` is resolved once, at import, to
+    whichever candidate holds the marker — so a lookup through it can only ever see ONE layout.
+    Measured 2026-09-16 by placing a repo under `.siblings/` on a developer machine: `_workspace.src`
+    found it and this function returned None, because `WORKSPACE` had already been fixed to the
+    parent directory. CI never hit that (there, `.siblings/` IS the marked root), which is the
+    problem — the disagreement was real and invisible from both sides, passing locally for one
+    reason and in CI for another. Searching the candidates directly makes the two resolvers agree
+    and makes this branch checkable on either layout.
+    """
+    for spelling in _SPELLINGS.get(label, (label,)):
+        for root in _CANDIDATES:
+            src = root / spelling / "src"
+            if src.is_dir():
+                return src
+    return None
+
+
 #: Where node 71's ember operator tooling lives. It was `agience-ember/node/`, then
 #: `_fleet/peers/71/ember/`; it now sits in `agience-cloud/node/`, the repo that already carries the
 #: node operational surface. `serve.env` travels with it: `run-serve.sh` sources the env file as a

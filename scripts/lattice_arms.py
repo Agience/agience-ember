@@ -50,9 +50,25 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+# ⚠ `scripts/` ON THE PATH BEFORE THE IMPORT BELOW. These programs are ALSO loaded BY PATH — by
+# `tests/test_lattice_scripts.py`, and by node tooling that runs one file — and in that case
+# `sys.path[0]` is the caller's directory, not this one, so a bare `import _workspace` raises
+# ModuleNotFoundError. `tests/conftest.py` does exactly this for `_paths`, for the same reason.
+import os as _os
+import sys as _sys
+
+_SCRIPTS_DIR = _os.path.dirname(_os.path.abspath(__file__))
+if _SCRIPTS_DIR not in _sys.path:
+    _sys.path.insert(0, _SCRIPTS_DIR)
+
+import _workspace
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _EMBER_SRC = os.path.normpath(os.path.join(_HERE, "..", "src"))
-_MANTLE_SRC = os.path.normpath(os.path.join(_HERE, "..", "..", "agience-mantle", "src"))
+# Through `_workspace`, which knows the developer, CI and node-45 layouts. A counted
+# `../..` resolves to a missing directory in CI and `sys.path.insert` of one is a no-op,
+# so the import below would find an unrelated installed copy or none at all.
+_MANTLE_SRC = _workspace.src("agience-mantle") or ""
 for _p in (_HERE, _EMBER_SRC, _MANTLE_SRC,
            os.path.join(_MANTLE_SRC, "mantle")):
     if _p not in sys.path:

@@ -40,8 +40,19 @@ _NODE = str(_paths.NODE_TOOLING)  # node 71's operator tooling, in the `agience-
 # node-repair's mantle-optional checks (seq accounting cross-check, counter drift, lexical index,
 # tail verdict) import `mantle.db`; make it resolvable the way the deployed PYTHONPATH does
 # so those checks reach their real implementation instead of taking the honest-SKIP fallback.
-_MANTLE = os.path.normpath(os.path.join(_HERE, "..", "..", "agience-mantle", "src"))
+# Through `_paths`, not counted from `__file__`. A hand-counted `../..` is right in a developer
+# workspace and wrong in CI, where `actions/checkout` puts the siblings under `.siblings/` because
+# it cannot write above the workspace. `sys.path.insert` of a directory that does not exist is a
+# NO-OP, so the wrong spelling left every mantle-backed check below silently taking its absent-
+# dependency fallback while the module reported a pass — which is the condition
+# `test_no_test_module_skips_on_a_wrong_path.py` exists to catch, and did.
+# A plain call, with no `or ""` fallback: `test_no_test_module_skips_on_a_wrong_path.py` evaluates
+# these expressions statically and a BoolOp is not something it can resolve, so the fallback would
+# have bought nothing and cost the guard its ability to check this line. `None` is handled below,
+# where it is a value rather than part of the path expression.
+_MANTLE = _paths.repo_src("agience-mantle")
 for _p in (_NODE, _MANTLE):
+    _p = str(_p) if _p is not None else ""
     if os.path.isdir(_p) and _p not in sys.path:
         sys.path.insert(0, _p)
 

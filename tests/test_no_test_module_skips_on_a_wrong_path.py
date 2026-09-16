@@ -57,8 +57,13 @@ _OSPATH = {"join", "dirname", "abspath", "normpath", "realpath", "expanduser"}
 #: than a wrong path — the distinction this whole module draws. It is listed here so the guard can
 #: evaluate it, and `_is_absent_dependency` below is what stops a missing `agience-cloud` reading as
 #: a defect while keeping a wrong FILE NAME under a present `agience-cloud` reading as one.
+#: `repo_src` is here for the same reason as the rest: it is a `_paths` resolver, so a module using
+#: it HAS routed its path through the one place that knows the layout — which is all this guard
+#: asks. It returns `None` for a repo that is not checked out rather than raising, and that is not a
+#: wrong path either: the callers are the checks whose job is to REPORT an absent repo, and they
+#: cannot do it if resolving the path takes them down first.
 _PATHS_CONSTANTS = {"EMBER_REPO", "WORKSPACE", "EMBER_SRC", "NODE_TOOLING"}
-_PATHS_CALLS = {"repo", "ember_src", "node_tooling"}
+_PATHS_CALLS = {"repo", "repo_src", "ember_src", "node_tooling"}
 
 #: Roots whose absence means "that repository is not checked out", not "this path is wrong".
 _ABSENT_DEPENDENCY_ROOTS = (_paths.NODE_TOOLING,)

@@ -101,7 +101,13 @@ Issues = "https://github.com/Agience/agience-ember/issues"
 host = ["agience-prism>=0.1.2"]
 # The test runners. No `pytest-asyncio`: this suite has zero async tests — measured, not
 # assumed — so listing it would install a plugin nothing here uses.
-dev = ["pytest>=8", "pytest-timeout>=2.2", "build>=1.0"]
+#
+# `threadpoolctl` reads the BLAS pool size back as an EFFECT. `tests/test_blas_thread_pin.py`
+# checks that `ember/__init__.py`'s OpenBLAS pin actually binds, and without this it can only
+# compare environment strings — so it fails rather than skips, deliberately, because a pin checked
+# as a string is a pin that has not been checked. Its docstring called this "a declared dev
+# dependency" while nothing declared it; measured 2026-09-16, that was 4 of ember's 21 CI failures.
+dev = ["pytest>=8", "pytest-timeout>=2.2", "build>=1.0", "threadpoolctl>=3.1"]
 
 # The instrument's own dependency. `ember/optics.py` imports entroptics eagerly, and it is the one
 # module in this package that may.

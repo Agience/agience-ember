@@ -65,6 +65,19 @@ import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
+# ⚠ `scripts/` ON THE PATH BEFORE THE IMPORT BELOW. These programs are ALSO loaded BY PATH — by
+# `tests/test_lattice_scripts.py`, and by node tooling that runs one file — and in that case
+# `sys.path[0]` is the caller's directory, not this one, so a bare `import _workspace` raises
+# ModuleNotFoundError. `tests/conftest.py` does exactly this for `_paths`, for the same reason.
+import os as _os
+import sys as _sys
+
+_SCRIPTS_DIR = _os.path.dirname(_os.path.abspath(__file__))
+if _SCRIPTS_DIR not in _sys.path:
+    _sys.path.insert(0, _SCRIPTS_DIR)
+
+import _workspace
+
 SEGREGATED_CLASSES = ("paraphrase",)
 DEFAULT_KS = (1, 5, 10, 20)
 
@@ -378,13 +391,14 @@ def _ensure_paths() -> Path:
     for p in here.parents:
         if (p / "src" / "ember" / "local_store.py").exists():
             ember_src = p / "src"
-            genesis_root = p.parent
             # mantle is imported as a package (`mantle.db.…`), so its outer src goes on the path.
             # Inserting the inner `<mantle>/mantle` path instead is what makes one class import as
             # two distinct objects.
-            mantle_src = genesis_root / "agience-mantle" / "src"
-            if mantle_src.is_dir() and str(mantle_src) not in sys.path:
-                sys.path.insert(0, str(mantle_src))
+            # `_workspace` rather than `genesis_root / ...`: the root discovered above is the
+            # PARENT of this repo, which is the developer layout only. Under CI the siblings live
+            # in `<repo>/.siblings/`, where that expression resolves to nothing and inserts
+            # nothing — silently, because inserting a missing path is a no-op.
+            _workspace.add_to_syspath("agience-mantle")
             break
     if str(ember_src) not in sys.path:
         sys.path.insert(0, str(ember_src))

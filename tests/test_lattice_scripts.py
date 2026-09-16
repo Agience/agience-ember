@@ -75,8 +75,13 @@ def test_no_runtime_module_imports_boto3_at_module_level():
     # Two roots: ember's source (which includes `ember/optics.py`) and mantle's lattice. Every root
     # is asserted to exist below, because a `glob` over a missing directory returns [] and enforces
     # nothing while the test still passes.
+    # `_paths` for the sibling, not a counted `../..` — in CI the siblings are under `.siblings/`
+    # and the hand-counted spelling resolves to a directory that does not exist. This assertion
+    # then reported the root as absent, which was true and was a fact about the path rather than
+    # about the tree.
+    _mantle_db = _paths.repo_src("agience-mantle")
     roots = [os.path.join(_SCRIPTS, "..", "src", "ember"),
-             os.path.join(_SCRIPTS, "..", "..", "agience-mantle", "src", "mantle", "db")]
+             str(_mantle_db / "mantle" / "db") if _mantle_db else "<agience-mantle not checked out>"]
     absent = [r for r in roots if not os.path.isdir(r)]
     assert not absent, (
         "declared as a scan root but not on disk: %s. A glob over a missing directory yields nothing "

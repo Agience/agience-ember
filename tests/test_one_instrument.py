@@ -15,6 +15,8 @@ scanner catching everything and a scanner catching nothing both go red.
 import ast
 import pathlib
 
+import _paths
+
 # The instrument itself is the only place entroptics is named. Everything else asks the wrapper.
 #
 # The exemption matches on BASENAME, so a second `optics.py` in any scanned repo would inherit it.
@@ -30,11 +32,13 @@ _REPOS = ("agience-mantle", "agience-ember", "agience-crystal",
 
 
 def _roots():
-    here = pathlib.Path(__file__).resolve()
-    genesis = here.parents[2]          # tests/ -> agience-ember/ -> the workspace
+    # Through `_paths.repo_src`, which knows both layouts (developer siblings and CI's
+    # `.siblings/`) and both spellings of prism. A counted `parents[2]` is right in one of those
+    # and wrong in the other, and being wrong here does not fail — it silently yields FEWER repos,
+    # shrinking the scan to whatever happens to resolve while the instrument still reports green.
     for r in _REPOS:
-        src = genesis / r / "src"
-        if src.is_dir():
+        src = _paths.repo_src(r)
+        if src is not None:
             yield r, src
 
 
@@ -87,8 +91,7 @@ def test_every_declared_repo_is_actually_scanned():
     the kind of thing a regroup changes, so declared-but-missing is an error here rather than a
     quiet omission from the scan.
     """
-    genesis = pathlib.Path(__file__).resolve().parents[2]
-    missing = [r for r in _REPOS if not (genesis / r / "src").is_dir()]
+    missing = [r for r in _REPOS if _paths.repo_src(r) is None]
     assert not missing, (
         "declared in _REPOS but has no `src/` on disk: " + ", ".join(missing)
         + "\n\nThese would be skipped silently, so the instrument would go unenforced there. Fix the "

@@ -39,6 +39,19 @@ import sys
 import time
 from typing import Any, Dict, Optional
 
+# ⚠ `scripts/` ON THE PATH BEFORE THE IMPORT BELOW. These programs are ALSO loaded BY PATH — by
+# `tests/test_lattice_scripts.py`, and by node tooling that runs one file — and in that case
+# `sys.path[0]` is the caller's directory, not this one, so a bare `import _workspace` raises
+# ModuleNotFoundError. `tests/conftest.py` does exactly this for `_paths`, for the same reason.
+import os as _os
+import sys as _sys
+
+_SCRIPTS_DIR = _os.path.dirname(_os.path.abspath(__file__))
+if _SCRIPTS_DIR not in _sys.path:
+    _sys.path.insert(0, _SCRIPTS_DIR)
+
+import _workspace
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
 
@@ -66,10 +79,15 @@ def _load_offer_module():
     # The repo layout and node 45's deploy layout differ, so both are tried. On 45 the source
     # ships flattened; a path that resolves in only one of the two places this script runs is a
     # latent break either way.
-    cands = [os.path.join(here, "..", "..", "agience-chorus", "src", "agience_chorus",
-                          "sage", "offer.py"),                                   # repo
+    # The repo layout (developer OR CI — `_workspace` knows both) and node 45's flattened deploy.
+    # The hand-written list had only the developer spelling of the first, so under CI it fell
+    # through to two paths that exist on exactly one machine and stopped with a FATAL naming three
+    # places none of which was where the checkout actually was.
+    _chorus = _workspace.src("agience-chorus")
+    cands = [os.path.join(_chorus, "agience_chorus", "sage", "offer.py") if _chorus else None,
              "/home/builder/genesis/chorus-src/sage/offer.py",                    # 45 deploy
              os.path.join(here, "..", "..", "chorus-src", "sage", "offer.py")]
+    cands = [c for c in cands if c]
     path = next((c for c in cands if os.path.exists(c)), None)
     if path is None:
         raise SystemExit(
@@ -93,8 +111,8 @@ def main() -> int:
 
     O = _load_offer_module()
 
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "..", "..", "agience-mantle", "src"))
+    _workspace.require_src("agience-mantle")
+    _workspace.add_to_syspath("agience-mantle")
     from mantle.db.vertex import LatticeArtifactStore
 
     store = LatticeArtifactStore(args.target, origin=os.environ.get("EMBER_NODE_ID", "45"))

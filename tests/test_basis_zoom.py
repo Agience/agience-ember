@@ -64,7 +64,7 @@ class _BasisStore:
 
     def __init__(self, B, band=(4, 30), gen="geom.corpus-basis~stub"):
         self.doc = {"id": gen, "root_id": "geom.corpus-basis",
-                    "content_type": pj.BASIS_CONTENT_TYPE, "state": "committed",
+                    "content_type": pj.BASIS_CONTENT_TYPE, "state": "live",
                     "k": int(B.shape[0]), "d": int(B.shape[1]),
                     "basis": [[float(x) for x in row] for row in B]}
         if band is not None:
@@ -400,7 +400,7 @@ def test_the_svd_derivation_stores_the_WHOLE_CERTIFIED_BAND_not_the_point_estima
 
     The instrument is muted here because there are two derivation paths and only one of them can be
     widened from inside this module. `ember.optics.principal_directions` returns exactly
-    `resolved_modes` columns — entroptics counts and slices in one call — so on the instrument path
+    `resolved_modes` columns — the instrument counts and slices in one call — so on the instrument path
     the widest matrix reachable through the one sanctioned door is the point estimate, and widening
     it would take either a private eigendecomposition here ([[one-instrument-enforced]]) or a `k`
     argument on `principal_directions`, which is `ember.optics`'s to add — a seam stated in

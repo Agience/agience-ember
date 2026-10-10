@@ -6,9 +6,9 @@
      so the whole package is banned with no allow-list.
 
   2. **Ember holds the instrument.** The instrument is one module — `optics`, the one sanctioned seam
-     onto entroptics — living at `ember/optics.py` under ember's AGPL and read from 14 sites in
+     onto the instrument — living at `ember/optics.py` under ember's AGPL and read from 14 sites in
      non-test `src/`. `tests/test_one_instrument.py` carries the companion rule that nothing else in
-     the workspace names entroptics.
+     the workspace names the instrument.
 
 Both halves are read out of the source rather than exercised at runtime. A relapsed
 `from beam.optics import …` does raise `ModuleNotFoundError` today, but only on the branch that
@@ -186,7 +186,7 @@ def test_holding_ember_registers_the_instrument_as_the_process_default():
     `# noqa: F401`. Without it the file passes in the suite and fails when run alone.
 
     The laziness of the factory is checked in a subprocess. `set_default(factory=…)` importing
-    `ember.optics` eagerly would drag numpy and entroptics into every process that only wanted the
+    `ember.optics` eagerly would drag numpy and the instrument into every process that only wanted the
     cache, which is the cost the lazy import exists to avoid. In this process `ember.optics` is
     already loaded by the time the suite reaches here, so an in-process check would measure test
     order; a fresh interpreter is where the question has an answer.
@@ -213,9 +213,9 @@ def test_holding_ember_registers_the_instrument_as_the_process_default():
          "import sys\n"
          "import ember\n"
          "assert 'ember.optics' not in sys.modules, 'EAGER: `import ember` loaded the instrument'\n"
-         # entroptics rather than numpy. `import ember` does load numpy, via `mantle.shard.cache`
+         # The instrument rather than numpy. `import ember` does load numpy, via `mantle.shard.cache`
          # and ember's own signal modules, for reasons unrelated to the instrument — so a numpy
-         # assertion would fire on that too. entroptics is the exact proxy: the instrument is the only
+         # assertion would fire on that too. The instrument is the exact proxy: the instrument is the only
          # thing in ember that pulls it, so its absence here says the factory has not run.
          "assert 'entroptics' not in sys.modules, 'EAGER: `import ember` pulled entroptics'\n"
          "from prism import instrument\n"
@@ -249,22 +249,22 @@ def test_the_wire_ember_imports_from_prism_is_importable():
             pytest.fail(f"ember names `prism.{mod}` and it does not import: {exc}")
 
 
-def test_the_screen_the_instrument_hands_back_is_entroptics_backed():
-    """The instrument must RETURN an entroptics object, not merely avoid importing one.
+def test_the_screen_the_instrument_hands_back_is_the_packages_own():
+    """The instrument must RETURN the instrument object, not merely avoid importing one.
 
-    MOVED HERE FROM `agience-crystal` ON 2026-08-25 [John: Entroptics must not be named in
+    MOVED HERE FROM `agience-crystal` ON 2026-08-25 [John: the instrument must not be named in
     crystal; move the tests that need it to a repo that can support it]. Crystal's
     `test_embodiment_injection.py` carried this line as the control for every parametrised test in
     that file:
 
-        assert ember_optics.membrane_screen().__module__.startswith("entroptics")
+        assert ember_optics.membrane_screen().__module__.startswith("the instrument")
 
     Without it, crystal's whole injection proof could have run against two stubs and reported
     success. Crystal is the wrong owner of the assertion anyway — `membrane_screen` is ember's
     function, and this is a fact about what ember hands over.
 
     IT IS NOT DUPLICATED BY THE TWO GUARDS BESIDE IT, which is why it had to move rather than
-    simply be deleted. `test_one_instrument.py` reads SOURCE and says only ember names entroptics;
+    simply be deleted. `test_one_instrument.py` reads SOURCE and says only ember names the instrument;
     `test_holding_ember_registers_the_instrument_as_the_process_default` says `import ember` does not
     pull it EAGERLY. Both are import-time facts. This one is a runtime fact about the returned
     object, and a stub screen wired in behind `membrane_screen` would satisfy both of the others.

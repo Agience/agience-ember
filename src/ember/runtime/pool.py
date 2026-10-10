@@ -481,7 +481,7 @@ def schedule(store) -> Dict[str, Any]:
     # 1,661 pairs, none reaching 0.95): there is no cut to find, so none is passed.
     #
     # Stating no threshold is not "the default"; it is the instrument's own resolution, which is
-    # the only boundary the evidence supports ([[compression-threshold-entroptics]]).
+    # the only boundary the evidence supports ([[compression-threshold-the instrument]]).
     for col in ("stage.2.world", "stage.1.grammar"):
         if enqueue(store, "op.consolidate.nearvdup",
                    {"collection_id": col, "apply": True},

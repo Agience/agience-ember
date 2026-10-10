@@ -390,7 +390,7 @@ def host_artifact(host_id: str, *, probed: Optional[Dict[str, dict]] = None,
     return {
         "id": "host.%s" % host_id,
         "content_type": HOST_CONTENT_TYPE,
-        "state": "committed",
+        "state": "live",
         "host": host_id,
         "platform": platform.system().lower() or None,
         "capabilities": p,
@@ -705,7 +705,7 @@ def register_remote_host(store, *, name: str, operators, endpoint: str = "",
         artifacts.put_artifact({
             "id": oid,
             "content_type": OPERATOR_CONTENT_TYPE,
-            "state": "committed",
+            "state": "live",
             # No `kind`/`spec`: we were sent a name. `evolution.spec_hash` returns None for this,
             # so it carries no content address and `opsign.verify_operator` reports it unsigned.
             "remote": True,
@@ -732,7 +732,7 @@ def register_remote_host(store, *, name: str, operators, endpoint: str = "",
     artifacts.put_artifact({
         "id": host_id,
         "content_type": HOST_CONTENT_TYPE,
-        "state": "committed",
+        "state": "live",
         "host": host_slug,
         "remote": True,
         "probed": False,                 # we are not running on it; nothing here was measured

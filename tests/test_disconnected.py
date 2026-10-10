@@ -89,7 +89,7 @@ def test_the_runner_refuses_to_build_an_answerer() -> None:
     answerer. A default composer here would let a node answer from the runner with nothing saying
     so, which is the one arrangement a caller cannot detect from the outside."""
     from ember.runtime.engine import NoAnswerer, build as _build
-    for name in ("extractive", "entroptics", "distill", "gpt-9"):
+    for name in ("extractive", "instrument", "distill", "gpt-9"):
         with pytest.raises(NoAnswerer):
             _build(name)
 

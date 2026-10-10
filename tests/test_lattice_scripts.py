@@ -307,7 +307,7 @@ def _offers_store(tmp):
     L = open_lattice(os.path.join(tmp, "c.db"), origin="test")
     L.artifacts.put_artifact({
         "id": "type.text/markdown", "content_type": "application/vnd.agience.content-type+json",
-        "declares": "text/markdown", "state": "committed", "created_by": "u",
+        "declares": "text/markdown", "state": "live", "created_by": "u",
         "created_time": "2026-01-01T00:00:00+00:00",
         # The markdown template is `{title}: {summary}`, with no `kind` field. A row resolves an
         # offer only if it carries a template field; `kind` is a structural discriminator, not
@@ -317,7 +317,7 @@ def _offers_store(tmp):
         "context_schema": {"properties": {"title": {"type": "string"},
                                           "summary": {"type": "string"}}},
     })
-    base = {"content_type": "text/markdown", "state": "committed", "created_by": "u",
+    base = {"content_type": "text/markdown", "state": "live", "created_by": "u",
             "created_time": "2026-01-01T00:00:00+00:00", "kind": "doc"}
     L.artifacts.put_artifact(dict(base, id="ok1", title="Has A Title"))
     L.artifacts.put_artifact(dict(base, id="no1"))   # no title/summary -> resolves nothing, no offer
@@ -662,11 +662,11 @@ def test_offers_write_does_NOT_bump_seq_an_offer_is_not_a_new_version():
     L = open_lattice(os.path.join(tmp, "c.db"), origin="test")
     L.artifacts.put_artifact({
         "id": "type.text/x-wordnet", "content_type": "application/vnd.agience.content-type+json",
-        "declares": "text/x-wordnet", "state": "committed", "created_by": "u",
+        "declares": "text/x-wordnet", "state": "live", "created_by": "u",
         "created_time": "2026-01-01T00:00:00+00:00",
         "offer_template": "the word {lemma}: {gloss}",
         "field_source": {"lemma": "lemmas.0"}})
-    L.artifacts.put_artifact({"id": "wn-x", "content_type": "text/x-wordnet", "state": "committed",
+    L.artifacts.put_artifact({"id": "wn-x", "content_type": "text/x-wordnet", "state": "live",
                               "created_by": "u", "created_time": "2026-01-01T00:00:00+00:00",
                               "lemmas": ["dog"], "gloss": "a canine"})
     seq_before = L.db.read().execute("SELECT _seq FROM vertex WHERE id='wn-x'").fetchone()[0]

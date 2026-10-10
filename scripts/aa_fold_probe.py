@@ -1,10 +1,10 @@
 """Unit AA — is the `oov="skip"` noise-floor explosion a property of Jiang-Conrath
-coordinates, or an artifact of entering entroptics through the wrong door?
+coordinates, or an artifact of entering the instrument through the wrong door?
 
 §5.3 of LATTICE-CONTRACT records a hard prerequisite ("a channel-liveness screen is needed
 before oov='skip'") on the strength of one measurement: with pure sparse JC coordinates the
-entroptics noise floor moves from ~1.5 to 1.13e9. That measurement went through
-`entroptics.read()` -> `screen.Screen`, whose fold decision is the entropy guard
+The instrument noise floor moves from ~1.5 to 1.13e9. That measurement went through
+the instrument's `read()` -> `screen.Screen`, whose fold decision is the entropy guard
 (screen.py:619, `fold = H_F < log2F - band_F`). The library's own locality criterion
 (batch.py:280-306) states that the entropy guard folds a sparse carrier and that averaging
 destroys it. This script measures both paths on the same real frames.
@@ -144,14 +144,14 @@ def fold_diagnostics(W: np.ndarray) -> dict:
 
 def reads(W: np.ndarray) -> dict:
     """Every read path, on identical input."""
-    import entroptics
+    from entroptics import read as _read
     from entroptics import Aperture
     from entroptics.batch import resolved_batch
 
     out: dict = {}
 
-    # (A) Unit G's path: entroptics.read() -> Screen. Entropy fold.
-    r = entroptics.read(W)
+    # (A) Unit G's path: the instrument.read() -> Screen. Entropy fold.
+    r = _read(W)
     out["A_read"] = {"K": int(r.K_signal), "floor": float(r.noise_floor),
                      "sigma_top": float(r.sigma_top)}
 

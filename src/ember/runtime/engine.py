@@ -5,9 +5,8 @@ lives in **artifacts** and is retrieved. Reasoning is a small, weightless operat
 was retrieved, so a wrong answer can only come from wrong evidence — inspectable,
 attributable, and fixable in a way a model weight is not.
 
-Composing prose from evidence is a persona act, so this module builds no answerer of its own.
-`ExtractiveEngine` / `EntropticsEngine` / `DistillEngine` live in **`lumen/composers.py`**, and
-so do `Evidence` and `Answer`: a typed gate at the conduit (`Engine.answer(query, evidence) ->
+Composing prose from evidence is a persona act, so this module builds no answerer of its own; the
+composers, `Evidence` and `Answer` live with the personas. A typed gate at the conduit (`Engine.answer(query, evidence) ->
 Answer`) would be a step-I/O pipeline contract, which the propagation rule forbids — the
 content type is born at the tekton, not declared ahead of it. Evidence carried off the plane is
 an `EVIDENCE_CT` artifact, not a dataclass.

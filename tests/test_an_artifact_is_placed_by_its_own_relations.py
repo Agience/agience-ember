@@ -49,7 +49,7 @@ from mantle.db import open_lattice
 
 def _mk(store, aid, **doc):
     store.artifacts.put_artifact(dict(
-        {"id": aid, "content_type": "text/x-wordnet", "state": "committed"}, **doc))
+        {"id": aid, "content_type": "text/x-wordnet", "state": "live"}, **doc))
 
 
 @pytest.fixture()

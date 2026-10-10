@@ -1,7 +1,7 @@
 """Tests for the model-free adaptive relevance cut (`adaptive_cut`).
 
 Inputs are raw BM25 scores (negative; most-negative is best, sorted best-first) — the same thing
-the serve path hands `_relevance_cut`. These run against the real entroptics engine through
+the serve path hands `_relevance_cut`. These run against the real the instrument engine through
 `ember/optics.py`, the one seam onto it. The contract: with a real (T, F) frame the instrument
 answers (`k_signal`); with only a score column there is no frame to read, and the cut defers.
 """
@@ -21,7 +21,7 @@ def test_WITHOUT_A_FRAME_IT_DEFERS_AND_THAT_IS_THE_CONTRACT():
 
     A list of scores is one dimension. The instrument resolves modes across features, so it reads a
     (T, F) frame with F >= 2; handed a single column there is no reading to take. Reshaping the
-    column into `entroptics.read` produces a number, but it answers "how many resolvable spots does
+    column into the instrument's `read` produces a number, but it answers "how many resolvable spots does
     a line have" — and it enters past the streaming front door `ember/optics.py` provides, applying
     the entropy fold guard that flattens a sparse carrier.
 

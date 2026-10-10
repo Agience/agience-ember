@@ -40,25 +40,25 @@ def store(tmp_path):
     return _Store(L)
 
 
-def _seed(store, *, grammar=40, world_committed=120, world_draft=30, loose=25):
+def _seed(store, *, grammar=40, world_live=120, world_archived=30, loose=25):
     """Deliberately asymmetric: two collections of different sizes plus artifacts in no collection,
     so a per-collection count and the global count cannot coincide by accident. A symmetric fixture
     would let a global-count answer pass as a per-collection one."""
     docs = []
     for i in range(grammar):
         docs.append({"id": "g%04d" % i, "content_type": "text/markdown",
-                     "collection_id": "stage.1.grammar", "state": "committed",
+                     "collection_id": "stage.1.grammar", "state": "live",
                      "content": "grammar", "size": 100, "lemmas": ["g%d" % i],
                      "cited_from": g.CITE_GENESIS, "provenance": g.P_HUMAN})
-    for i in range(world_committed + world_draft):
+    for i in range(world_live + world_archived):
         docs.append({"id": "w%04d" % i, "content_type": "text/markdown",
                      "collection_id": "stage.2.world",
-                     "state": "committed" if i < world_committed else "draft",
+                     "state": "live" if i < world_live else "archived",
                      "content": "world", "size": 200, "lemmas": ["w%d" % i],
                      "cited_from": g.CITE_GENESIS, "provenance": g.P_HUMAN})
     for i in range(loose):
         docs.append({"id": "op.free.%02d" % i, "content_type": g.OPERATOR_CONTENT_TYPE,
-                     "state": "committed", "content": "op",
+                     "state": "live", "content": "op",
                      "cited_from": g.CITE_GENESIS, "provenance": g.P_HUMAN})
     store.artifacts.put_many(docs, batch=200)
     return len(docs)
@@ -71,8 +71,8 @@ def test_collection_count_is_per_collection_not_the_global_corpus(store):
     total = _seed(store)
     assert store.artifacts.count() == total
 
-    grammar = g._count_collection(store, "stage.1.grammar", committed_only=False)
-    world = g._count_collection(store, "stage.2.world", committed_only=False)
+    grammar = g._count_collection(store, "stage.1.grammar")
+    world = g._count_collection(store, "stage.2.world")
 
     assert grammar == 40
     assert world == 150
@@ -86,29 +86,36 @@ def test_a_collection_with_no_members_counts_zero_not_the_corpus(store):
     is largest for the emptiest stage — a brand-new curriculum stage would read as already
     complete."""
     _seed(store)
-    assert g._count_collection(store, "stage.9.never.ingested", committed_only=False) == 0
+    assert g._count_collection(store, "stage.9.never.ingested") == 0
 
 
-def test_committed_only_selects_a_different_counter(store):
-    """`committed_only` selects a different counter, so the two arms give different numbers.
-    `advance_curriculum` depends on `False` counting every state: a committed-only answer there
-    under-counts, hands the ingester a low resume offset, and re-ingests held records."""
-    _seed(store, world_committed=120, world_draft=30)
-    assert g._count_collection(store, "stage.2.world", committed_only=False) == 150
-    assert g._count_collection(store, "stage.2.world", committed_only=True) == 120
+def test_the_collection_count_includes_archived_rows(store):
+    """The count covers every state. `advance_curriculum` uses it as the resume offset: a live-only
+    answer there under-counts, hands the ingester a low resume offset, and re-ingests held records."""
+    _seed(store, world_live=120, world_archived=30)
+    assert g._count_collection(store, "stage.2.world") == 150
+
+
+def test_the_streamed_count_agrees_with_the_typed_count(store):
+    """`_count_in` is the fallback `_count_collection` streams through when a store has no typed
+    counter. The lattice store's `list_artifacts` drops archived rows by default, so the stream has
+    to ask for them, or the two paths answer 120 and 150 for the same stage."""
+    _seed(store, world_live=120, world_archived=30)
+    assert g._count_in(store, "stage.2.world") == 150
+    assert g._count_in(store, "stage.2.world") == g._count_collection(store, "stage.2.world")
 
 
 def test_advance_curriculum_resume_offset_is_the_stage_count(monkeypatch, store):
     """The same property end to end. `have` is the resume offset and both sides of the exhaustion
     test `drained = (now <= have)`; fed the global count it would skip un-ingested records and
     promote on corpus size rather than stage size."""
-    _seed(store, grammar=0, world_committed=0, world_draft=0, loose=200)
+    _seed(store, grammar=0, world_live=0, world_archived=0, loose=200)
     seen = {}
 
     def fake_ingest(s, skip, limit):
         seen["skip"] = skip
         s.artifacts.put_many([
-            {"id": "n%04d" % i, "content_type": "text/markdown", "state": "committed",
+            {"id": "n%04d" % i, "content_type": "text/markdown", "state": "live",
              "collection_id": "stage.test", "content": "x", "size": 1,
              "cited_from": g.CITE_GENESIS, "provenance": g.P_HUMAN} for i in range(5)])
         return {"ingested": 5}
@@ -129,12 +136,12 @@ def test_shards_done_is_not_silently_empty_and_is_scoped_by_source(store):
     for i in range(7):
         store.artifacts.put_artifact({
             "id": g._shard_done_id("wikipedia-en", "s%d" % i), "content_type": SHARD_DONE_CT,
-            "state": "committed", "source_name": "wikipedia-en", "shard": "s%d" % i,
+            "state": "live", "source_name": "wikipedia-en", "shard": "s%d" % i,
             "cited_from": g.CITE_GENESIS, "provenance": g.P_HUMAN})
     for i in range(3):
         store.artifacts.put_artifact({
             "id": g._shard_done_id("simplewiki", "t%d" % i), "content_type": SHARD_DONE_CT,
-            "state": "committed", "source_name": "simplewiki", "shard": "t%d" % i,
+            "state": "live", "source_name": "simplewiki", "shard": "t%d" % i,
             "cited_from": g.CITE_GENESIS, "provenance": g.P_HUMAN})
 
     assert g._shards_done(store, "wikipedia-en") == ["s%d" % i for i in range(7)]
@@ -152,7 +159,7 @@ def test_mark_shard_done_round_trips(store):
 
 # ── the rho ledger ───────────────────────────────────────────────────────────
 def test_consolidated_members_reads_the_edges(store):
-    _seed(store, grammar=10, world_committed=0, world_draft=0, loose=0)
+    _seed(store, grammar=10, world_live=0, world_archived=0, loose=0)
     store.graph.add_edges([("g0000", "g%04d" % i, "consolidates", {"force": "derivation"})
                            for i in range(1, 4)])
     store.graph.add_edges([("g0000", "g0009", "lineage", {"force": "derivation"})])
@@ -166,7 +173,7 @@ def test_rho_falls_once_members_are_consolidated(store):
     """ρ is the entropy gauge the curriculum is steered by. With `_consolidated_members` answering
     `set()`, every artifact counts as its own generator and ρ reads exactly 1.0 — the "nothing
     consolidated yet" baseline — on a corpus that has been consolidated."""
-    _seed(store, grammar=10, world_committed=0, world_draft=0, loose=0)
+    _seed(store, grammar=10, world_live=0, world_archived=0, loose=0)
     before = g.collection_metrics(store, "stage.1.grammar")
     assert before["rho"] == 1.0
 
@@ -197,10 +204,10 @@ def test_count_null_is_none_without_allow_scan(store):
 
 
 def test_count_null_counts_the_holes_under_allow_scan(store):
-    _seed(store, grammar=10, world_committed=0, world_draft=0, loose=0)
+    _seed(store, grammar=10, world_live=0, world_archived=0, loose=0)
     for i in range(4):
         store.artifacts.put_artifact({"id": "hole%d" % i, "content_type": "text/markdown",
-                                      "collection_id": "stage.1.grammar", "state": "committed",
+                                      "collection_id": "stage.1.grammar", "state": "live",
                                       "content": "x", "provenance": g.P_HUMAN})
     assert g._count_null(store, "cited_from", allow_scan=True) == 4
     assert g._count_null(store, "provenance", allow_scan=True) == 0
@@ -210,15 +217,15 @@ def test_count_null_is_a_superset_when_state_is_gone(store):
     """`_count_null` counts every state, because contract §2 has no `state` column for the predicate
     to scope on.
 
-    The count is therefore a superset of the committed-only one, and the direction is what makes it
+    The count is therefore a superset of the live-only one, and the direction is what makes it
     usable: the only consumer is `invariant_holds = (miss == 0)`, so a superset can raise a false
     alarm but cannot report a clean audit over a dirty corpus."""
-    _seed(store, grammar=0, world_committed=0, world_draft=0, loose=0)
-    store.artifacts.put_artifact({"id": "committed-hole", "content_type": "text/markdown",
-                                  "state": "committed", "content": "x", "provenance": g.P_HUMAN})
-    store.artifacts.put_artifact({"id": "draft-hole", "content_type": "text/markdown",
-                                  "state": "draft", "content": "x", "provenance": g.P_HUMAN})
-    # committed-only truth is 1; the state-free count is 2. Superset, never subset.
+    _seed(store, grammar=0, world_live=0, world_archived=0, loose=0)
+    store.artifacts.put_artifact({"id": "live-hole", "content_type": "text/markdown",
+                                  "state": "live", "content": "x", "provenance": g.P_HUMAN})
+    store.artifacts.put_artifact({"id": "archived-hole", "content_type": "text/markdown",
+                                  "state": "archived", "content": "x", "provenance": g.P_HUMAN})
+    # live-only truth is 1; the state-free count is 2. Superset, never subset.
     assert g._count_null(store, "cited_from", allow_scan=True) == 2
 
 
@@ -251,13 +258,13 @@ class _Exploding:
 
 
 def test_no_converted_site_hands_sql_to_a_non_arcade_connection(store, monkeypatch):
-    _seed(store, grammar=5, world_committed=5, world_draft=0, loose=5)
+    _seed(store, grammar=5, world_live=5, world_archived=0, loose=5)
     store.graph.add_edges([("g0000", "g0001", "consolidates", {})])
     monkeypatch.setattr(type(store.artifacts), "c", _Exploding(), raising=False)
     monkeypatch.setattr(type(store.graph), "c", _Exploding(), raising=False)
 
     assert g._shards_done(store, "wikipedia-en") == []
-    assert g._count_collection(store, "stage.1.grammar", committed_only=False) == 5
+    assert g._count_collection(store, "stage.1.grammar") == 5
     assert g._count_null(store, "cited_from", allow_scan=True) == 0
     assert g._consolidated_members(store) == {"g0001"}
 

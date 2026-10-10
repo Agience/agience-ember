@@ -236,7 +236,7 @@ def _rate_from_history(store, snap):
         pass
     try:
         store.artifacts.put_artifact({"id": "stats.prev", "content_type": _S3SYNC_CT_PREV,
-                                      "state": "committed", "artifacts": now_n, "ts": now_t,
+                                      "state": "live", "artifacts": now_n, "ts": now_t,
                                       "scanned_total": out.get("_scanned_total", 0)})
     except Exception:
         pass

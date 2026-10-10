@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agience-ember"
-version = "0.1.1"
+version = "0.2.0"
 description = "Ember — an observer unit: the Agience local leaf/cache, two-way, holds its own shards and runs disconnected. Import name is `ember`."
 readme = { file = "README.md", content-type = "text/markdown" }
 # 3.11, matching every package below it. Ember imports `agience-prism`, `agience-crystal` and
@@ -44,7 +44,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.24",        # BSD — anchor geometry
     "cryptography>=42.0", # Apache/BSD — Ed25519 shard signatures
-    "agience-prism[trust,vector,wire]>=0.1.2",
+    "agience-prism[trust,vector,wire]>=0.1.4",
                           # Apache — declared because ember imports it directly, at 63 import sites
                           # across non-test source:
                           #   [wire]  frames · conservation · demurrage · propagation · minhash ·
@@ -53,8 +53,10 @@ dependencies = [
                           #   base    envelope · resolution · mass · grounding · runner · law ·
                           #           attestation · canonical · delegate · source · crystal_model
                           #           (47 sites) — stdlib-only, no extra.
-                          #   [trust] `prism.trust` 4 sites — genesis (`opsign`), signal x2
-                          #           (`opsign`), serve (`authority_trust.verify_jwt`). python-jose.
+                          #   [trust] `prism.trust` 5 sites — genesis (`opsign`), signal x2
+                          #           (`opsign`), custody (`key_manager`), serve
+                          #           (`authority_trust.verify_access_token`, first shipped in
+                          #           0.1.4, which is why that is the floor). python-jose.
                           #   [vector] `prism.vector` 1 site — signal/projection. numpy.
                           # The rule is one rule: declare what you import directly. An edge that
                           # only resolves transitively through someone else's manifest is a fact
@@ -72,7 +74,12 @@ dependencies = [
                           # ImportError on the first import. This was undeclared while the manifest
                           # stated the rule it was breaking — it only ever resolved because every
                           # repo in this workspace happens to be `pip install -e`'d.
-    "agience-mantle>=0.1.0",  # Apache — mantle.search.anchors is the shared coordinate system,
+    "entroptics==0.2.8",  # AGPL — the instrument. `ember/optics.py` is its one door and imports it
+                          # eagerly. EXACT, not a floor: 0.2.x releases have changed measured values
+                          # without changing the API, and `prism.vectors/screen_read_vectors.json`
+                          # pins the values this version produces. Move this pin and the vectors
+                          # together (optics.py's runtime check is major.minor only).
+    "agience-mantle>=0.1.3",  # Apache — mantle.search.anchors is the shared coordinate system,
                           # mantle.db is the store, mantle.shard is the cache/store/local
                           # collection layer, and mantle.mesh is the mesh. Module-level imports in
                           # runtime/boot.py, corpus/ingest.py and ember/__init__.py — a hard edge,
@@ -98,7 +105,7 @@ Issues = "https://github.com/Agience/agience-ember/issues"
 # `host` serves Ember's operator surface to local services (the "vice versa" direction). It is a
 # no-op that resolves to a dependency already required above, kept so `pip install
 # agience-ember[host]` succeeds.
-host = ["agience-prism>=0.1.2"]
+host = ["agience-prism>=0.1.4"]
 # The test runners. No `pytest-asyncio`: this suite has zero async tests — measured, not
 # assumed — so listing it would install a plugin nothing here uses.
 #
@@ -109,17 +116,17 @@ host = ["agience-prism>=0.1.2"]
 # dependency" while nothing declared it; measured 2026-09-16, that was 4 of ember's 21 CI failures.
 dev = ["pytest>=8", "pytest-timeout>=2.2", "build>=1.0", "threadpoolctl>=3.1"]
 
-# The instrument's own dependency. `ember/optics.py` imports entroptics eagerly, and it is the one
+# The instrument's own dependency. `ember/optics.py` imports the instrument eagerly, and it is the one
 # module in this package that may.
 #
-# It is an extra rather than a hard dependency because the entroptics-free surface is real and
+# It is an extra rather than a hard dependency because the instrument-free surface is real and
 # load-bearing: Ember's cache, runner, relay, identity, corpus and config all import and work with
 # no instrument present. A node that carries frames installs the base; a node that measures them
 # installs `[optics]`; `prism.instrument` reports the missing measurement at the point of
-# measurement rather than failing at import. A hard dependency would put entroptics on every leaf
+# measurement rather than failing at import. A hard dependency would put the instrument on every leaf
 # that only ever holds shards.
 #
-# Both this and the base resolve from PyPI — `entroptics` 0.2.1 is published, which satisfies the
+# Both this and the base resolve from PyPI — the instrument (0.2.1) is published, which satisfies the
 # range below. The reason for the extra is the one above, not availability.
 optics = ["entroptics>=0.2,<0.3"]
 # Bootstrap only — materialising WordNet into the corpus, once. Not a runtime dependency.
@@ -136,7 +143,7 @@ optics = ["entroptics>=0.2,<0.3"]
 # do not need it). The runtime serves everything from the corpus rows those ingesters mint.
 bootstrap = ["nltk>=3.9", "wn>=0.13"]
 
-# There is no large-model extra. Ember's engine reaches entroptics through `ember.optics` —
+# There is no large-model extra. Ember's engine reaches the instrument through `ember.optics` —
 # lightweight reasoning over artifacts, with knowledge retrieved rather than compressed into
 # weights. That is why `dependencies` above is four permissive packages and no model runtime: a leaf
 # that had to ship a GGUF would not be a leaf.

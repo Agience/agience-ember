@@ -327,11 +327,13 @@ def colimit(store, member_ids: Sequence[str], *, label_keyed: bool, include_unan
     coll = member_colls[0] if member_colls else None
     if coll:
         doc["collection_id"] = coll
-    # `state` was absent too, and every member carries one. An artifact with no state is not
-    # archived, so it is not skipped — it is routed to a segment chosen from nothing.
-    states = [st for st in (d.get("state") for d in docs) if st]
-    if states:
-        doc["state"] = states[0]
+    # `state` is written explicitly, because an artifact with no state is routed to a segment chosen
+    # from nothing. The stored states are `live` and `archived`. The colimit is archived only when
+    # every member is archived: one live member keeps what it merges live. A member with no state,
+    # or any value other than `archived`, reads as live. Decided over the whole member set, so the
+    # answer does not depend on which member sorts first.
+    doc["state"] = ("archived" if docs and all(d.get("state") == "archived" for d in docs)
+                    else "live")
 
     morphisms = [(cid, m, COLIMIT_LABEL, {"via": "op.consolidate.colimit"}) for m in ids]
     if coll:

@@ -410,8 +410,8 @@ def ingest_stage0_oewn(store, *, author: str = DEFAULT_AUTHOR, force: bool = Fal
     # guard, so a store whose rows landed under an older build still gains the describer.
     _ensure_ctype(store, g.WORDNET_CONTENT_TYPE, author=author, **_WN_TYPE)
     if oewn_done(store) and not force:
-        existing = store.artifacts.count(state="committed")
-        return {"skipped": 1, "reason_already_ingested": 1, "committed": existing, "ingested": 0}
+        existing = store.artifacts.count(state="live")
+        return {"skipped": 1, "reason_already_ingested": 1, "live": existing, "ingested": 0}
 
     g.mint_source_triple(store, "oewn", cite_meta={
         "dataset": "Open English WordNet 2024", "provider": "Global WordNet Association",
@@ -467,7 +467,7 @@ def ingest_stage0_oewn(store, *, author: str = DEFAULT_AUTHOR, force: bool = Fal
         doc = {
             "id": aid,
             "content_type": g.WORDNET_CONTENT_TYPE,
-            "state": "committed",
+            "state": "live",
             "title": words[0],                   # the primary lemma, as a field
             "gloss": defn,                       # the definition, clean and unstyled
             "content": defn,                     # the information itself
@@ -746,7 +746,7 @@ def _concept_doc(term: str, author: str) -> Dict[str, Any]:
     return {
         "id": "cn-" + term,
         "content_type": CONCEPT_CONTENT_TYPE,
-        "state": "committed",
+        "state": "live",
         # ── The offer, and the name ──────────────────────────────────────────────────────
         # A term node's offer is the term. It had none: `context` carried "the concept {word}:
         # a ConceptNet 5.7 English term node", which names the source, and these rows carried
@@ -843,7 +843,7 @@ def ingest_stage0_conceptnet(store, *, author: str = DEFAULT_AUTHOR, force: bool
         if upto > applied:
             applied = upto
             store.artifacts.put_artifact({
-                "id": CN_CURSOR_ID, "content_type": CN_CURSOR_CT, "state": "committed",
+                "id": CN_CURSOR_ID, "content_type": CN_CURSOR_CT, "state": "live",
                 "lines_done": applied,
                 # `offer`, not `content`: this is a title that restates `lines_done` on the same
                 # doc, and the naming field is `offer` — context, offer, description and title
@@ -1090,7 +1090,7 @@ def ingest_stage0_omw(store, *, author: str = DEFAULT_AUTHOR, force: bool = Fals
             doc = {
                 "id": aid,
                 "content_type": g.WORDNET_CONTENT_TYPE,
-                "state": "committed",
+                "state": "live",
                 "title": words[0],
                 "gloss": defn,
                 "content": defn,

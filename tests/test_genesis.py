@@ -186,7 +186,7 @@ def test_rho_baseline_is_one_without_consolidation():
     s = _FakeStore()
     g.bootstrap(s)
     s.artifacts.put_artifact({"id": "wn-x", "content_type": "text/x-wordnet",
-                              "state": "committed", "context": "meaning of x", "lemmas": ["x"],
+                              "state": "live", "context": "meaning of x", "lemmas": ["x"],
                               "content": "x" * 100, "collection_id": "stage.0.lexicon"})
     m = g.collection_metrics(s, "stage.0.lexicon", consolidated=set())
     assert m["artifacts"] == 1 and m["rho"] == 1.0 and m["keyed_coverage"] == 1.0
@@ -197,7 +197,7 @@ def test_rho_falls_when_a_member_is_consolidated():
     g.bootstrap(s)
     for i in range(4):
         s.artifacts.put_artifact({"id": f"wn-{i}", "content_type": "text/x-wordnet",
-                                  "state": "committed", "context": "m", "content": "z" * 100,
+                                  "state": "live", "context": "m", "content": "z" * 100,
                                   "collection_id": "stage.0.lexicon"})
     # canonical wn-0 consolidates wn-1 -> wn-1 stops counting as a generator
     m = g.collection_metrics(s, "stage.0.lexicon", consolidated={"wn-1"})
@@ -224,7 +224,7 @@ def test_advance_curriculum_resumes_and_promotes(monkeypatch):
         for k in range(limit):
             i = base + k
             store.artifacts.put_artifact({"id": f"w{i}", "content_type": "text/markdown",
-                                          "state": "committed", "content": "x", "lemmas": ["x"],
+                                          "state": "live", "content": "x", "lemmas": ["x"],
                                           "collection_id": "stage.1.grammar"})
         return {"ingested": limit}
 
@@ -290,6 +290,62 @@ def test_minhash_finds_templated_near_dups():
 
 
 
+
+
+# ── state: live, archived, and the legacy values an unmigrated store still holds ─────────────
+def test_a_live_read_finds_a_legacy_committed_row():
+    """The store answers `state="live"` with the legacy `committed` and `draft` rows too, and the
+    fake models that rule. An ember reader asking for `live` must see an unmigrated row: here
+    `audit_provenance` has to count the legacy row, and does not count the archived one."""
+    s = _FakeStore()
+    for aid, state in (("legacy", "committed"), ("new", "live"), ("old", "archived")):
+        s.artifacts.put_artifact({"id": aid, "content_type": "text/markdown", "state": state,
+                                  "cited_from": "cite.genesis", "provenance": "observed"})
+    assert {a["id"] for a in s.artifacts.list_artifacts(state="live")} == {"legacy", "new"}
+    assert s.artifacts.count(state="live") == 2
+    assert g.audit_provenance(s)["total"] == 2
+
+
+def test_the_streamed_collection_count_includes_archived_rows():
+    """With no typed counter, `_count_collection` streams through `_count_in`, and the two paths
+    count the same thing: every state, archived included."""
+    s = _FakeStore()
+    for aid, state in (("a", "live"), ("b", "committed"), ("c", "archived")):
+        s.artifacts.put_artifact({"id": aid, "content_type": "text/markdown", "state": state,
+                                  "collection_id": "stage.x"})
+    s.artifacts.put_artifact({"id": "elsewhere", "content_type": "text/markdown", "state": "live"})
+    assert g._count_in(s, "stage.x") == 3
+    assert g._count_collection(s, "stage.x") == 3
+
+
+@pytest.mark.parametrize("given,stored", [("committed", "live"), ("draft", "live"), (None, "live"),
+                                          ("live", "live"), ("archived", "archived")])
+def test_a_write_site_stores_only_live_or_archived(given, stored):
+    doc = {"id": "x"} if given is None else {"id": "x", "state": given}
+    assert g._stored_state(doc)["state"] == stored
+
+
+def test_an_observation_that_says_committed_is_stored_live():
+    """`prism.source.Observation.to_doc()` below prism 0.1.3 writes `committed`, and the store does
+    not normalise on write. The source runtime stores what it polls as `live` regardless."""
+    from prism.source import Observation
+    from ember.corpus.sources import SourceRuntime
+
+    class _OldObservation(Observation):
+        def to_doc(self):
+            return dict(super().to_doc(), state="committed")
+
+    class _Src:
+        name, kind = "old", "folder"
+
+        def poll(self):
+            yield _OldObservation(id="obs-1", content="hello", content_type="text/plain")
+
+    s = _FakeStore()
+    rt = SourceRuntime(s)
+    rt.register(_Src())
+    assert rt.poll_once() == 1
+    assert s.artifacts.get_artifact("obs-1")["state"] == "live"
 
 
 # ── skip-guarded integration smoke (real store + nltk) ───────────────────────

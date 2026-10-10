@@ -23,7 +23,7 @@ import secrets as _secrets
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 
 MODEL_ID = "agience-ember"
 
@@ -55,6 +55,81 @@ def _http_write_ops() -> frozenset:
 def _is_local_only_op(op: str) -> bool:
     """`op.dev.*` is local tooling and is never invocable over HTTP, registry readable or not."""
     return str(op).startswith("op.dev.")
+
+
+def _origin_subject(handler) -> Optional[str]:
+    """The subject of a verified Origin access token on this request, or None.
+
+    `verify_access_token` is prism's one verifier for a caller's identity: the signature against
+    origin's published JWKS, then the claim rule in `prism.access_token`. That rule refuses what a
+    signature alone accepts — Origin's refresh, email-verification and password-reset tokens are
+    signed with the same key — and requires a user token to be addressed to the authority issuer.
+    Ember answers to no server client id, so no delegation is minted for it and none is accepted
+    (`delegation_audiences=()`).
+
+    Fails closed: an invalid signature, unknown key, expired token, refused claim or missing trust
+    anchor yields None, never a partial or assumed identity."""
+    try:
+        raw = handler.headers.get("Authorization") or ""
+        if raw.lower().startswith("bearer "):
+            tok = raw[7:].strip()
+            if tok:
+                from prism.trust.authority_trust import verify_access_token as _verify
+                sub = str(_verify(tok, delegation_audiences=()).get("sub") or "").strip()
+                return sub or None
+    except Exception:
+        pass
+    return None
+
+
+def _holds_invoke_token(handler) -> bool:
+    """True when `EMBER_INVOKE_TOKEN` is set and the request's `X-Ember-Token` matches it.
+
+    Unset means nobody holds it. Fails closed on any error, including a non-ASCII header value,
+    which `compare_digest` refuses to compare."""
+    try:
+        tok = os.getenv("EMBER_INVOKE_TOKEN", "")
+        return bool(tok) and _secrets.compare_digest(str(handler.headers.get("X-Ember-Token", "")), tok)
+    except Exception:
+        return False
+
+
+class _Caller(NamedTuple):
+    """An authenticated caller, for the paths that write.
+
+    `principal` is whose scope a write lands in: the token's subject, the principal a token holder
+    names in `X-Ember-Principal`, or None for the node's own principal. `operator` is True only for
+    the holder of `EMBER_INVOKE_TOKEN`, the one credential `/v1/invoke` accepts."""
+    principal: Optional[str]
+    operator: bool
+
+
+def _verified_caller(handler) -> Optional[_Caller]:
+    """The authenticated caller of this request, or None for an unauthenticated one."""
+    sub = _origin_subject(handler)
+    if sub:
+        return _Caller(principal=sub, operator=_holds_invoke_token(handler))
+    if _holds_invoke_token(handler):
+        return _Caller(principal=(handler.headers.get("X-Ember-Principal") or "").strip() or None,
+                       operator=True)
+    return None
+
+
+def _browser_origin_allowed(handler) -> bool:
+    """False when a browser sent this request from an origin not named in `EMBER_ALLOWED_ORIGINS`.
+
+    An `Origin` header means a browser sent the request; a CLI, a peer or a script has no reason to
+    set one. A drive-by page can POST to this port as a CORS *simple request* (`text/plain`, no
+    preflight), so the header is the only thing that tells its request apart from a local client's.
+    `EMBER_ALLOWED_ORIGINS` is a comma-separated list of exact origins
+    (`https://app.example.com`); unset, every browser origin is refused. A request without the
+    header is not affected."""
+    origin = (handler.headers.get("Origin") or "").strip()
+    if not origin:
+        return True
+    allowed = {o.strip().rstrip("/") for o in os.getenv("EMBER_ALLOWED_ORIGINS", "").split(",")
+               if o.strip()}
+    return origin.rstrip("/") in allowed
 
 
 def _resolve_delegate(handler, store):
@@ -91,23 +166,13 @@ def _resolve_delegate(handler, store):
     # missing trust anchor yields no identity, never a partial or assumed one. It falls through to
     # the commons rather than raising, because a commons read is a legitimate request; it simply is
     # not this caller's.
-    try:
-        _raw = (handler.headers.get("Authorization") or "")
-        if _raw.lower().startswith("bearer "):
-            _tok = _raw[7:].strip()
-            if _tok:
-                from prism.trust.authority_trust import verify_jwt as _verify
-                _claims = _verify(_tok, expected_issuer_service="origin")
-                _sub = str(_claims.get("sub") or "").strip()
-                if _sub:
-                    return Delegate.get(store, person=_sub)
-    except Exception:
-        pass                                     # no identity — fall through to anonymous
+    _sub = _origin_subject(handler)              # None: no identity — fall through to anonymous
+    if _sub:
+        return Delegate.get(store, person=_sub)
 
     # ── 2. shared-secret header (internal/trusted callers only) ──────────────────────────────────
     try:
-        tok = os.getenv("EMBER_INVOKE_TOKEN", "")
-        if tok and _secrets.compare_digest(str(handler.headers.get("X-Ember-Token", "")), tok):
+        if _holds_invoke_token(handler):
             person = (handler.headers.get("X-Ember-Principal") or "").strip() or None
             did = (handler.headers.get("X-Ember-Delegate") or "").strip() or None
             if person or did:
@@ -166,11 +231,17 @@ def _last_user(messages: List[dict]) -> str:
     return (messages[-1].get("content") or "").strip() if messages else ""
 
 
-def _control_answer(store, query: str):
+def _control_answer(store, query: str, caller: Optional[_Caller] = None):
     """Deterministic intent router: status / ingest / advance are answered by invoking the
     corresponding operator.
 
     Returns `(text, cited)`, or None when this is not a control need.
+
+    The branches that write take `caller`, the authenticated caller from `_verified_caller`, and
+    refuse without one. `remember` writes into a private collection, so it needs a principal and
+    lands in that principal's own scope; with no caller it would land in the node owner's.
+    `advance` and `ingest` change the whole corpus, so they need the operator credential, the same
+    one `/v1/invoke` requires for the operators they run. `status` reads and needs neither.
 
     `cited` is returned so `grounded` derives from it on this path exactly as it does on the others.
     Each operator-backed branch cites the operator it invoked; the branches that store nothing cite
@@ -190,7 +261,11 @@ def _control_answer(store, query: str):
             if not text:
                 # Nothing was invoked, so nothing grounds this reply.
                 return "Nothing to remember. Say e.g. “remember that my project ships Friday”.", []
-            r = genesis.remember(store, text)
+            if caller is None:
+                # Nothing was invoked, so nothing grounds this reply.
+                return ("Not stored: remembering writes to a private collection, and this request "
+                        "is not authenticated. Send an Origin access token as a Bearer token."), []
+            r = genesis.remember(store, text, principal=caller.principal)
             if not r.get("stored"):
                 return f"Did not store: {r.get('reason')}", []
             return (f"Noted — stored privately, only for you (owner-scoped, no_share + no_promote). "
@@ -206,6 +281,12 @@ def _control_answer(store, query: str):
                      key=lambda kv: -kv[1]["artifacts"])[:6]
         lines.append("collections: " + ", ".join(f"{c}={d['artifacts']}(ρ{d['rho']})" for c, d in top))
         return "\n".join(lines) + "\n\n[via op.status.universe]", ["op.status.universe"]
+    _writes_corpus = (("advance" in q and "curriculum" in q) or q in ("advance", "ingest next", "next")
+                      or (q.startswith("ingest ") and ("wiki" in q or "stage 1" in q or "stage1" in q)))
+    if _writes_corpus and not (caller is not None and caller.operator):
+        # Nothing was invoked, so nothing grounds this reply.
+        return ("Not run: advancing or ingesting changes the corpus, and needs the operator "
+                "credential (X-Ember-Token matching EMBER_INVOKE_TOKEN)."), []
     if ("advance" in q and "curriculum" in q) or q in ("advance", "ingest next", "next"):
         r = genesis.invoke(store, "op.curriculum.advance")["result"]
         return (f"advanced: {json.dumps(r)}\n\n[via op.curriculum.advance]",
@@ -472,7 +553,7 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
         #     mismatched (count, ts) pairs, corrupting the numbers the loop exists to publish. A box
         #     that runs `serve` without a health loop reports nothing, which shows on the status page
         #     as a missing peer rather than as wrong numbers.
-        #   * Nothing on a timer full-scans the corpus. A metrics pass that walks every committed row
+        #   * Nothing on a timer full-scans the corpus. A metrics pass that walks every live row
         #     summing bytes with no overlap guard, on a fixed-interval tick, stacks another full scan
         #     on the last once a single pass runs longer than the interval — at corpus scale that
         #     alone pins the database's CPU and GC threads, independent of anything else running.
@@ -726,8 +807,10 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
                 #  2. An `Origin` header means a browser sent it. A CLI, a peer or a script has no
                 #     reason to set one; a drive-by page always does. This is what stops the
                 #     no-preflight simple-request path above.
-                #  3. A shared secret when `EMBER_INVOKE_TOKEN` is set. Off by default so the local
-                #     dev loop is unchanged, and a node exposed on the LAN can require it.
+                #  3. The shared secret `EMBER_INVOKE_TOKEN`, required. Unset means the endpoint is
+                #     closed, exactly as `/hosts/register` and `/api/console/run` are: operators
+                #     such as `op.curriculum.advance` and `op.source.wikipedia-simple` write the
+                #     corpus, and a node reachable on the LAN would otherwise run them for anyone.
                 if op in _http_write_ops() or _is_local_only_op(op):
                     self._send({"error": f"{op!r} is local developer tooling (it writes files "
                                          f"and/or spawns processes) and is not invocable over "
@@ -735,9 +818,11 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
                     return
                 if self.headers.get("Origin"):
                     self._send({"error": "cross-origin invoke refused"}, 403); return
-                _tok = os.getenv("EMBER_INVOKE_TOKEN", "")
-                if _tok and not _secrets.compare_digest(
-                        str(self.headers.get("X-Ember-Token", "")), _tok):
+                if not os.getenv("EMBER_INVOKE_TOKEN", ""):
+                    self._send({"error": "invoke is disabled: set EMBER_INVOKE_TOKEN to enable it "
+                                         "(it runs operators that write the corpus)"}, 403)
+                    return
+                if not _holds_invoke_token(self):
                     self._send({"error": "invalid or missing invoke token"}, 401); return
                 try:
                     from ember import genesis
@@ -746,9 +831,17 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
                     self._send({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
                 return
 
+            # `/v1/chat/completions`. The same browser gate as `/v1/invoke`: a drive-by page can
+            # POST here as a no-preflight simple request, and this path writes (`remember`) and runs
+            # corpus operators (`advance`, `ingest`). A browser origin is refused unless
+            # `EMBER_ALLOWED_ORIGINS` names it; the writes additionally need an authenticated caller.
+            if not _browser_origin_allowed(self):
+                self._send({"error": {"message": "cross-origin chat refused: set "
+                                                 "EMBER_ALLOWED_ORIGINS to allow this origin"}}, 403)
+                return
             query = _last_user(req.get("messages", []))
             faults: List[str] = []
-            control = _control_answer(store, query)
+            control = _control_answer(store, query, _verified_caller(self))
             if control is not None:
                 # One rule for groundedness on every arm of this handler: citing implies grounded.
                 text, cited = control

@@ -1,14 +1,14 @@
 """The instrument is reached through one instrument: `ember/optics.py` is the only module in the
-scanned repos that imports `entroptics`.
+scanned repos that imports the instrument.
 
-The instrument exists for a measured reason recorded in its own header. `entroptics.read()` and
+The instrument exists for a measured reason recorded in its own header. The instrument's `read()` and
 `Screen(W)` bypass the streaming front door and apply the entropy fold guard that the library
 documents as destroying a sparse carrier — 256 feature channels folded to F_eff = 1 and reported as
 `K_signal = 1`, which at the call site is indistinguishable from "there is one real mode". Ontology
 coordinates are sparse, so a direct import changes what a read means.
 
 This file is the enforcement, because a convention that is only written down drifts: nothing stops a
-caller from reaching past the wrapper and calling `entroptics.read()` directly. The scan is measured
+caller from reaching past the wrapper and calling the instrument's `read()` directly. The scan is measured
 against the tree rather than trusted, and each of its own guarantees carries a control, so that a
 scanner catching everything and a scanner catching nothing both go red.
 """
@@ -17,7 +17,7 @@ import pathlib
 
 import _paths
 
-# The instrument itself is the only place entroptics is named. Everything else asks the wrapper.
+# The instrument itself is the only place the instrument is named. Everything else asks the wrapper.
 #
 # The exemption matches on BASENAME, so a second `optics.py` in any scanned repo would inherit it.
 # `test_the_exemption_names_exactly_one_file` measures the exemption against the tree and pins it to
@@ -103,7 +103,7 @@ def test_the_exemption_names_exactly_one_file():
     """The instrument is one module, and `_ALLOWED` matches on basename.
 
     A second `optics.py` in any scanned repo would be exempted by its name and could import
-    entroptics freely -- a second door, invisible to every other test here. So the exemption is
+    the instrument freely -- a second door, invisible to every other test here. So the exemption is
     measured against the tree rather than trusted: the scan finds exactly one file it exempts, and
     it is ember's.
 
@@ -144,7 +144,7 @@ def test_the_scan_can_parse_every_file_it_claims_to_scan():
 
 
 def test_the_scanner_actually_catches_a_seeded_violation(tmp_path):
-    """The negative control. `test_only_the_instrument_seam_imports_entroptics` passes when the tree is
+    """The negative control. `test_only_the_seam_imports_the_instrument` passes when the tree is
     clean, and would pass identically if `_scan` returned [] unconditionally. So every violation
     form is seeded into a throwaway tree along with the exemptions, and both are asserted: a scanner
     catching everything and one catching nothing each go red.
@@ -176,7 +176,7 @@ def test_the_scanner_actually_catches_a_seeded_violation(tmp_path):
     assert len(bad) == 3, "expected exactly the 3 seeded violations, got %d: %s" % (len(bad), bad)
 
 
-def test_only_the_instrument_seam_imports_entroptics():
+def test_only_the_seam_imports_the_instrument():
     bad = _offenders()
     assert not bad, (
         "these reach past the instrument (`ember.optics`) into entroptics directly:\n  "

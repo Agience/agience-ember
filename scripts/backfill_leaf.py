@@ -48,7 +48,7 @@ def _load(A):
 
 
 def _save(A, rid, done, note=""):
-    A.put_artifact({"id": CURSOR_ID, "content_type": CURSOR_CT, "state": "committed",
+    A.put_artifact({"id": CURSOR_ID, "content_type": CURSOR_CT, "state": "live",
                     "rid": rid, "rows_done": done, "note": note, "ts": time.time()},
                    stamp_rev=False)
 

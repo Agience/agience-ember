@@ -73,24 +73,24 @@ def _world(tmp_path):
     L.artifacts.ensure_schema()
     L.graph.ensure_schema()
     L.artifacts.put_many([
-        {"id": TRANSDUCER_ID, "content_type": "application/x-transducer", "state": "committed",
+        {"id": TRANSDUCER_ID, "content_type": "application/x-transducer", "state": "live",
          "kind": "transducer", "spec": {"lang": "en", "entry_label": "lex:en",
                                         "lemma_prefix": "lemma:", "exceptions": {}}},
-        {"id": "wn-wolf.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-wolf.n.01", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["wolf"], "hypernyms": ["canine.n.02"], "ic": 9.0,
          "content": "any of various predatory carnivorous canine mammals",
          "cited_from": "cite.wordnet"},
-        {"id": "wn-canine.n.02", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-canine.n.02", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["canine"], "hypernyms": [], "ic": 5.0,
          "content": "any of various fissiped mammals with nonretractile claws",
          "cited_from": "cite.wordnet"},
-        {"id": "cn-wolf", "content_type": CN, "state": "committed",
+        {"id": "cn-wolf", "content_type": CN, "state": "live",
          "lemmas": ["wolf"], "ic": 6.5,
          "content": "wolf - ConceptNet 5.7 concept /c/en/wolf",
          "cited_from": "cite.conceptnet"},
         # No `cited_from` — the colimit does not mint one, and that absence is load-bearing below:
         # it is the row a `or "cite.wordnet"` fallback would fabricate a source for.
-        {"id": "concept-c0ffee", "content_type": WN, "state": "committed",
+        {"id": "concept-c0ffee", "content_type": WN, "state": "live",
          "lemmas": ["wolf", "grey_wolf"], "ic": 7.0,
          "content": "colimit of 2 records of one concept"},
     ])
@@ -231,7 +231,7 @@ def test_the_cache_reverifies_against_the_id_it_resolved_to(tmp_path):
     first = wn.synset("cn-wolf", store=L)
     assert wn.synset("cn-wolf", store=L) is first, "re-verified entry was rebuilt"
     L.artifacts.put_many([
-        {"id": "cn-wolf", "content_type": CN, "state": "committed",
+        {"id": "cn-wolf", "content_type": CN, "state": "live",
          "lemmas": ["wolf"], "ic": 6.75, "content": "wolf - ConceptNet 5.7 concept /c/en/wolf",
          "cited_from": "cite.conceptnet"},
     ])

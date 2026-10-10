@@ -10,7 +10,7 @@ the digests it returns are something `SpectrumProbe` can index, or that the whol
 trip through mantle's serialisation.
 
 This file is the join. ember is the only package that may hold both sides: it imports mantle
-directly, and it is the sole sanctioned entroptics door (`tests/test_one_instrument.py`).
+directly, and it is the sole sanctioned the instrument door (`tests/test_one_instrument.py`).
 
 ## What is asserted
 
@@ -74,12 +74,13 @@ def _digest(members, instrument, cid):
 
 
 def test_a_mantle_frame_digests_through_the_real_read(instrument):
-    """The join itself: mantle builds the frame, entroptics reads it, and neither had to change."""
+    """The join itself: mantle builds the frame, the instrument reads it, and neither had to change."""
     frame = build_frame(_ANIMALS, collection_id="animals")
     assert frame.rows == 3, "the frame did not take every member"
 
     d = _digest(_ANIMALS, instrument, "animals")
-    assert d.engine_id == "entroptics.mp.dev", (
+    from entroptics.proximity import ENGINE_ID_PROXIMITY
+    assert d.engine_id == ENGINE_ID_PROXIMITY, (
         "the digest does not carry the instrument that took it, so a cross-engine comparison "
         "could not be refused: %r" % (d.engine_id,))
     assert d.rows == 3

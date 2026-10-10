@@ -497,7 +497,7 @@ def propagation_floor() -> Optional[float]:
 # scale for both. prism owns the kernel; the length that goes into it is measured just above, from
 # the corpus's own is-a tree (`xi = 1/mu`, `mu = ln(d_max / d_edge)`; see `_derive_geometry`).
 #
-# entroptics' `correlation_length` / `decay(X).xi` read a decay length off an ordered (T, F) frame:
+# the instrument's `correlation_length` / `decay(X).xi` read a decay length off an ordered (T, F) frame:
 # how fast a trajectory decorrelates along its row order. This ξ is a length in JC-nat space over a
 # tree, and the corpus's is-a structure is not that frame — `forgetting.py` measured that
 # `Dynamics.rates()` returns None on concept streams, an observation set being not a trajectory. So
@@ -798,7 +798,7 @@ def fired_field(text: str, store=None) -> Dict[str, float]:
 
     # One definition of how much a word narrows the corpus, in bits, shared with
     # `activation.seeds_from_text`. `information.word_information` reads exact document frequency
-    # off `fts5vocab` and converts it through `entroptics.entropy.surprisal_bits`, so a surprisal
+    # off `fts5vocab` and converts it through the instrument's `entropy.surprisal_bits`, so a surprisal
     # here composes with the entropy reads the rest of the instrument reports.
     _info = _information.word_information(store)
 

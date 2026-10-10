@@ -1,6 +1,6 @@
 """Unit AB — does the fold-criteria disagreement dissolve on continuous input?
 
-Unit AA (`aa_fold_probe.py`) measured, on symbolic Jiang-Conrath frames, that entroptics'
+Unit AA (`aa_fold_probe.py`) measured, on symbolic Jiang-Conrath frames, that the instrument's
 two fold criteria disagree: the entropy guard (`entropy.py:135`) folds a sparse carrier that
 the locality criterion (`batch.py:277-306`) holds must stay unfolded. `ember/optics.py` exists
 to route around that door.
@@ -16,7 +16,7 @@ An RF spectral frame is a smooth ordered continuum. So the prediction under test
     On genuinely continuous spectral input the two criteria agree, K_signal tracks the
     planted mode count, and the noise floor stops swinging orders of magnitude.
 
-This script is where that prediction is measured; it is the first run of entroptics on a real
+This script is where that prediction is measured; it is the first run of the instrument on a real
 spectral frame in this codebase. It is falsifiable: if the criteria still disagree on a smooth
 waterfall, the fold door is a library problem rather than an input-mismatch problem, and Phase 6
 of AGENT-HOST-DESIGN.md is wrong.
@@ -111,7 +111,7 @@ def smooth_band(T=T_DEFAULT, F=F_DEFAULT, *, k=3, bw=14.0, snr=6.0, rng) -> tupl
 def iq_carriers(T=T_DEFAULT, F=F_DEFAULT, *, k=2, bw=3.0, snr=8.0, rng) -> tuple[np.ndarray, int]:
     """Complex I/Q — phase is real information. Ground truth K = k.
 
-    entroptics accepts complex natively (`instrument.py:17`), and `ember/optics.py` materialises at
+    The instrument accepts complex natively (`instrument.py:17`), and `ember/optics.py` materialises at
     the frame's own precision, so a complex frame keeps its phase through the seam. The comparison
     below shows what a plain `dtype=np.float64` coercion does to the same frame."""
     W = (rng.standard_normal((T, F)) + 1j * rng.standard_normal((T, F))) / math.sqrt(2.0)

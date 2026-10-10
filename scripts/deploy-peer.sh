@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy the current ember/mantle/entroptics CODE to a peer box and restart its pool fleet.
+# Deploy the current ember/mantle/the instrument CODE to a peer box and restart its pool fleet.
 #
 # NOTE: data-defined operators (op.operator.define — sources, compositions) need NO deploy: they
 # live in the SHARED store, so both boxes read the same operator artifact and get updates for free.
@@ -17,10 +17,10 @@ PEER="${1:-${PEER:-}}"
 if [ -z "$PEER" ]; then
   echo "deploy-peer.sh: no peer given." >&2
   echo "  Pass one as \$1, or set PEER, e.g. PEER=builder@<peer-host> scripts/deploy-peer.sh" >&2
-  echo "  Peer addresses are recorded in _fleet/peers/<node>/INVENTORY.md." >&2
+  echo "  Peer addresses are recorded in agience-cloud/peers/<node>/INVENTORY.md." >&2
   exit 2
 fi
-KEY="${KEY:-$HOME/.ssh/entroptics_builder_ed25519}"
+KEY="${KEY:?set KEY to the peer ssh key}"
 PORT="${PORT:-2222}"
 WORKERS="${WORKERS:-8}"
 # This script is `<workspace>/agience-ember/scripts/deploy-peer.sh` and every path below is
@@ -35,8 +35,7 @@ tar czf - -C "$REPO/agience/agience-ember/src"        $EX ember      | $SSH "$PE
 tar czf - -C "$REPO/agience/agience-mantle/src/mantle" $EX db         | $SSH "$PEER" "tar xzf - -C ~/genesis/mantle"
 # `agience-beam` was archived 2026-08-05 and ember imports it in 0 modules
 # (`tests/test_ember_holds_the_instrument.py` holds that at zero), so no `core` leg is synced.
-tar czf - -C "$REPO/agience/entroptics/src"           $EX entroptics | $SSH "$PEER" "tar xzf - -C ~/genesis/entroptics-src"
-# The node loops ship here too. Syncing the libraries (ember, mantle/db, entroptics) alone
+# The node loops ship here too. Syncing the libraries (ember, mantle/db, the instrument) alone
 # leaves node/{ingest,health,content}-loop.py on every box at whatever was last copied by hand — a
 # box running an ingest-loop.py with no lease renewer while the fix sits in the repo, and every
 # "why is it behaving like the old code" question traces back to this line.

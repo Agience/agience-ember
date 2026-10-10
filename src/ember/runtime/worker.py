@@ -579,7 +579,7 @@ def run_aggregator(*, interval: float = 20.0) -> int:
                     try:
                         store.artifacts.put_artifact(
                             {"id": "ember.restart.budget", "content_type": "application/x-ember-state",
-                             "state": "committed", "window_start": win_start, "count": count + 1},
+                             "state": "live", "window_start": win_start, "count": count + 1},
                             stamp_rev=False)
                     except Exception:
                         pass

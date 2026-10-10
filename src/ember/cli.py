@@ -43,7 +43,7 @@ def cmd_ingest(args) -> int:
                                       wiki_dump=args.wiki or None,
                                       anchors=_load_anchors(args.anchors))
     print(f"ingested {n} artifacts to store in {time.time()-t:.1f}s  ->  index {ember.status()['cache']}")
-    print(f"store artifacts (committed): {store.artifacts.count(state='committed')}")
+    print(f"store artifacts (live): {store.artifacts.count(state='live')}")
     print(f"index cache: {ember.settings.cache_dir}")
     return 0
 

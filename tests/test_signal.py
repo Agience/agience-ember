@@ -298,7 +298,7 @@ def test_resolve_distinguishes_the_address_kinds(store):
 
 def test_resolve_a_local_operator(store):
     store.artifacts.put_artifact({"id": "op.mine", "content_type": "application/vnd.agience.operator+json",
-                                  "state": "committed", "kind": "composition", "spec": {"steps": []}})
+                                  "state": "live", "kind": "composition", "spec": {"steps": []}})
     r = signal.resolve("op.mine", store=store)
     assert r["kind"] == "local" and r["runtime"] == "composition"
 

@@ -112,7 +112,7 @@ def test_every_seam_target_ACTUALLY_IMPORTS_and_carries_what_the_declarers_read(
         # Screen's own measurement rather than a parameter the declarer passes in.
         "forgetting": ("Screen",),
         # the instrument, reached by name because `ember/optics.py` is the only module that imports
-        # entroptics. `astra/reading/` (ingest) and `lumen/reading/` (reasoning) both read the
+        # The instrument. `astra/reading/` (ingest) and `lumen/reading/` (reasoning) both read the
         # ordered-stream operator and the shuffled control off it.
         "optics": ("sequence_operator", "surrogate_significance", "embed"),
         # The browse facet's four. Measured at its call sites in `aria/facets/browse.py`, the same

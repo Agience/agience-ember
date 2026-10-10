@@ -63,9 +63,10 @@ def test_a_refresher_fault_cannot_break_the_write_that_prompted_it():
 
 
 def test_the_real_instrument_fills_the_seam_mantle_declares():
-    """`read` and `engine_id` come from the host, and they are entroptics' own."""
+    """`read` and `engine_id` come from the host, and they are the instrument's own."""
     read, engine_id = optics.proximity_read(), optics.proximity_engine_id()
-    assert engine_id == "entroptics.mp.dev"
+    from entroptics.proximity import ENGINE_ID_PROXIMITY
+    assert engine_id == ENGINE_ID_PROXIMITY
     frame = np.random.default_rng(0).normal(size=(12, 6))
     got = read(frame)
     assert len(got) > 0 and all(np.isfinite(v) for v in got), (

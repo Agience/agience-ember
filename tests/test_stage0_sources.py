@@ -172,14 +172,14 @@ def _seed_synsets(s):
     """A PWN-3.0 spine row (no ili field — the nltk rows carry none) plus an OEWN row that
     carries the ili pivot key, exactly as op.source.oewn lands them."""
     s.artifacts.put_artifact({"id": "wn-able.a.01", "content_type": "text/x-wordnet",
-                              "state": "committed", "context": "able", "content": "able",
+                              "state": "live", "context": "able", "content": "able",
                               "lemmas": ["able"], "collection_id": "stage.0.lexicon"})
     s.artifacts.put_artifact({"id": "wn-oewn-00001740-a", "content_type": "text/x-wordnet",
-                              "state": "committed", "context": "able", "content": "able",
+                              "state": "live", "context": "able", "content": "able",
                               "lemmas": ["able"], "ili": "i1",
                               "collection_id": "stage.0.lexicon"})
     s.artifacts.put_artifact({"id": "wn-oewn-77777777-n", "content_type": "text/x-wordnet",
-                              "state": "committed", "context": "orphan", "content": "orphan",
+                              "state": "live", "context": "orphan", "content": "orphan",
                               "lemmas": ["orphan"], "ili": "i3",
                               "collection_id": "stage.0.lexicon"})
 
@@ -327,7 +327,7 @@ def test_shared_collection_promotes_only_when_every_source_is_done(monkeypatch):
     def _mk(name):
         def ing(store, skip, limit):
             store.artifacts.put_artifact({"id": f"x-{name}", "content_type": "text/x-wordnet",
-                                          "state": "committed", "content": "x", "lemmas": ["x"],
+                                          "state": "live", "content": "x", "lemmas": ["x"],
                                           "collection_id": "stage.0.lexicon"})
             state[name] = True                    # the ingester drains and writes its marker
             return {"ingested": 1}

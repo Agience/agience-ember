@@ -427,7 +427,7 @@ class _Rates:
 
 
 class _FakeDynamics:
-    """Stands in for the entroptics operator so the rate spread can be dictated exactly."""
+    """Stands in for the instrument operator so the rate spread can be dictated exactly."""
     spread = (2.0, 1.0)                          # (short_range, long_range) -> two timescales
 
     def __init__(self, n):

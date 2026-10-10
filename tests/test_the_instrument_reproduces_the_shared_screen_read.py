@@ -3,20 +3,20 @@
 ## Why both halves have to exist
 
 One question — how many independent directions a frame has — has two implementations, and they
-cannot import each other. `ember.optics` reads it through the full entroptics instrument;
+cannot import each other. `ember.optics` reads it through the full the instrument;
 `mantle/search/beacon` reads it with a reduced, dependency-free engine that ships to installs which
-never get entroptics. A shared vector file is what holds them to the same answer, and it only does
+never get the instrument. A shared vector file is what holds them to the same answer, and it only does
 that while both halves read it. Read by one, it is a private fixture wearing a shared name.
 
 The beacon half is `agience-mantle/tests/test_beacon_conformance.py`. This is the instrument half.
-ember is where it belongs: `ember.optics` is the single sanctioned entroptics door
+ember is where it belongs: `ember.optics` is the single sanctioned the instrument door
 (`tests/test_one_instrument.py`), so this is the only package that can take an instrument read at all.
 
 Each case rebuilds its frame from `(seed, N, F, planted, snr, dead_cols)` per the file's
 `_how_to_build`, so no matrix is stored and both engines construct byte-identical input from the
 same recipe.
 
-The vectors are also the fine half of the entroptics binding. `ember.optics` pins the version, but a
+The vectors are also the fine half of the instrument binding. `ember.optics` pins the version, but a
 release can change values without changing the API, and a matching version does not by itself mean
 matching numbers. These cases are what would catch that.
 
@@ -96,7 +96,7 @@ def test_the_recipe_is_deterministic():
 def test_the_instrument_reproduces_the_pinned_read(v):
     """`k_signal` and `scale_hazard` on each pinned frame.
 
-    A failure here is one of two things, worth telling apart: entroptics moved underneath the
+    A failure here is one of two things, worth telling apart: the instrument moved underneath the
     instrument, or the instrument's own read changed. Either way the fix is deliberate — move the
     vectors in the same commit as the change.
     """

@@ -13,6 +13,11 @@ import dataclasses
 import json as _json
 import sqlite3 as _sqlite3
 
+# The store's own rule for which recorded `state` values a `state=` query matches: `live` (and the
+# legacy `committed`) also match the unmigrated `committed` and `draft` rows. Imported rather than
+# restated, so the fake cannot drift from the store it stands in for.
+from mantle.db.constants import live_states as _live_states
+
 
 # ── an in-memory stand-in for the leaf store (artifacts + labeled graph) ──────────────────────
 class _FakeArtifacts:
@@ -85,12 +90,16 @@ class _FakeArtifacts:
         The two conditions are both load-bearing. An explicit `state` has already decided the set,
         so `include_archived` governs only the unfiltered read; and the test is `== "archived"`
         rather than a truthiness check, mirroring the store's null-safe `IS NOT` — a doc with no
-        `state` at all is committed-by-absence and stays.
+        `state` at all is live-by-absence and stays.
+
+        An explicit `state` matches as the store matches it (`mantle.db.constants.live_states`):
+        `state="live"` also returns legacy `committed` and `draft` rows.
         """
+        states = _live_states(state) if state else None
         for a in self.d.values():
             if content_type and a.get("content_type") != content_type:
                 continue
-            if state and a.get("state") != state:
+            if states is not None and a.get("state") not in states:
                 continue
             if collection_id and a.get("collection_id") != collection_id:
                 continue
@@ -99,7 +108,9 @@ class _FakeArtifacts:
             yield dict(a)
 
     def count(self, *, state=None):
-        return sum(1 for a in self.d.values() if state is None or a.get("state") == state)
+        """Sums every recorded value `state` matches, as the store's counters do."""
+        states = _live_states(state) if state else None
+        return sum(1 for a in self.d.values() if states is None or a.get("state") in states)
 
     def put_many(self, docs, *, batch=500):
         n = 0

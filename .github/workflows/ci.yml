@@ -103,9 +103,9 @@ jobs:
       # actually gets, and a divergence in either is a failure rather than a surprise.
       - run: pip install './.siblings/agience-prism-py[trust,vector,wire]' './.siblings/agience-crystal[ontology]' './.siblings/agience-mantle[service,search,s3]' ./.siblings/agience-origin
       # `optics` too, not just `dev`. This job is the FULL suite and 8 of its test files import
-      # `ember.optics`, whose one eager `import entroptics` then fails at collection --
-      # ModuleNotFoundError, 8 collection errors, red on every commit. `entroptics` is an extra by
-      # design (the entroptics-free surface is real), so the base install correctly omits it; the
+      # `ember.optics`, whose one eager import of the instrument then fails at collection --
+      # ModuleNotFoundError, 8 collection errors, red on every commit. The instrument is an extra by
+      # design (the instrument-free surface is real), so the base install correctly omits it; the
       # job that proves that surface is `install-resolves`, which installs the base and passes.
       # A suite calling itself full while skipping the instrument was testing less than it claimed.
       - run: pip install -e '.[dev,optics]'

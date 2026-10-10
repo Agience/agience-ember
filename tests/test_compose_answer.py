@@ -49,14 +49,14 @@ def world(tmp_path):
     L.artifacts.ensure_schema()
     L.graph.ensure_schema()
     L.artifacts.put_many([
-        {"id": "wn-einstein.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-einstein.n.01", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["einstein"], "hypernyms": [], "ic": 9.0,
          "content": SHARED, "cited_from": "cite.wordnet"},
         # the OEWN twin: a different artifact id, byte-identical gloss
-        {"id": "wn-oewn-10974490-n", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-oewn-10974490-n", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["albert_einstein"], "hypernyms": [], "ic": 9.0,
          "content": SHARED, "cited_from": "cite.oewn"},
-        {"id": "wn-physicist.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-physicist.n.01", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["physicist"], "hypernyms": [], "ic": 5.0,
          "content": OTHER, "cited_from": "cite.wordnet"},
     ])
@@ -106,7 +106,7 @@ def test_a_lead_with_no_gloss_grounds_nothing(world):
     """An artifact with no definition condenses to no sentence, so a field of only such leads
     composes to the same null as an empty field."""
     from ember.ontology import activation
-    world.artifacts.put_artifact({"id": "wn-blank.n.01", "content_type": WN, "state": "committed",
+    world.artifacts.put_artifact({"id": "wn-blank.n.01", "content_type": WN, "state": "live",
                                   "pos": "n", "lemmas": ["blank"], "content": "",
                                   "cited_from": "cite.wordnet"})
     answer, cites = activation.compose(world, "blank", [{"concept": "blank.n.01", "salience": 1.0}])

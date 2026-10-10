@@ -115,9 +115,9 @@ def test_filtered_list_artifacts_pushes_the_filter_into_SQL():
     from mantle.db import open_lattice
     L = open_lattice(os.path.join(tempfile.mkdtemp(), "c.db"), origin="test")
     ct = "application/vnd.agience.task+json"
-    L.artifacts.put_artifact({"id": "t1", "content_type": ct, "state": "committed",
+    L.artifacts.put_artifact({"id": "t1", "content_type": ct, "state": "live",
                               "created_by": "u", "created_time": "2026-01-01T00:00:00+00:00"})
-    L.artifacts.put_artifact({"id": "x1", "content_type": "text/markdown", "state": "committed",
+    L.artifacts.put_artifact({"id": "x1", "content_type": "text/markdown", "state": "live",
                               "created_by": "u", "created_time": "2026-01-01T00:00:00+00:00"})
     got = [a["id"] for a in L.artifacts.list_artifacts(content_type=ct)]
     assert got == ["t1"], "the filter did not select"

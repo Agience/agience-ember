@@ -50,16 +50,23 @@ class _Syn:
         return self._n
 
 
-def _corpus(monkeypatch, n, seed):
+def _corpus(monkeypatch, n, seed, planted=0):
     """A stubbed noun coordinate cloud: `n` rows of a sparse D-wide coordinate. `build_basis` reads
     the corpus through the crystal ontology driver, which is stubbed here, so this is the whole
-    corpus as far as it is concerned."""
+    corpus as far as it is concerned.
+
+    `planted` adds that many strong rank-one modes. A test that needs two derivations to differ in
+    WIDTH plants a different count in each, so the change comes from the construction: pure noise
+    resolves no mode, falls back to the SVD at the certified upper edge, and that edge is a property
+    of the instrument's interval (all of D under the instrument (0.2.8)), not of the corpus."""
     rng = np.random.default_rng(seed)
-    vecs = {}
+    M = np.zeros((n, D))
     for i in range(n):
-        v = np.zeros(D)
-        v[rng.choice(D, 4, replace=False)] = rng.normal(size=4)
-        vecs["c%d" % i] = v
+        M[i, rng.choice(D, 4, replace=False)] = rng.normal(size=4)
+    for _ in range(planted):
+        u, w = rng.normal(size=n), rng.normal(size=D)
+        M += 6.0 * np.sqrt(n) * np.outer(u / np.linalg.norm(u), w / np.linalg.norm(w))
+    vecs = {"c%d" % i: M[i] for i in range(n)}
     syns = [_Syn(k, v) for k, v in vecs.items()]
     from crystal.ontology import geometry as g
     from crystal.ontology import driver as wn
@@ -91,13 +98,13 @@ def test_a_rebuild_leaves_the_superseded_generation_QUERYABLE(tmp_path, monkeypa
     assertions below would prove nothing."""
     L = _lattice(tmp_path)
 
-    _corpus(monkeypatch, 200, seed=1)
+    _corpus(monkeypatch, 200, seed=1, planted=2)
     assert pj.build_basis(L) is not None
     gen1 = L.artifacts.head_of(pj.BASIS_ROOT)
     k1 = gen1["k"]
 
     pj._BASIS_CACHE.clear()
-    _corpus(monkeypatch, 400, seed=2)                 # a different corpus -> a different basis
+    _corpus(monkeypatch, 400, seed=2, planted=4)      # a different corpus -> a different basis
     assert pj.build_basis(L) is not None
     gen2 = L.artifacts.head_of(pj.BASIS_ROOT)
 
@@ -254,7 +261,7 @@ def test_the_live_generation_follows_a_rebuild_WITHOUT_a_restart(tmp_path, monke
     The negative control is in the same test: with nothing written the basis is not re-hydrated. A
     cache that is simply disabled would pass the freshness half and cost 327 ms per screen."""
     reader = _lattice(tmp_path)
-    _corpus(monkeypatch, 200, seed=1)
+    _corpus(monkeypatch, 200, seed=1, planted=2)
     writer = _lattice(tmp_path)                       # a second handle — the repair process
     pj.build_basis(writer)
 
@@ -262,7 +269,7 @@ def test_the_live_generation_follows_a_rebuild_WITHOUT_a_restart(tmp_path, monke
     assert B0 is not None
     assert pj.load_basis(reader) is B0, "the basis was re-hydrated with nothing written"
 
-    _corpus(monkeypatch, 400, seed=2)
+    _corpus(monkeypatch, 400, seed=2, planted=4)
     pj.build_basis(writer)
     B1 = pj.load_basis(reader)
     assert B1 is not None and B1.shape != B0.shape, (

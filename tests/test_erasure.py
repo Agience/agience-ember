@@ -17,7 +17,7 @@ def _lattice():
 
 
 def _put(L, aid, **kw):
-    d = {"id": aid, "content_type": "text/x-wordnet", "state": "committed",
+    d = {"id": aid, "content_type": "text/x-wordnet", "state": "live",
          "created_by": "u", "created_time": "2026-01-01T00:00:00+00:00"}
     d.update(kw)
     L.artifacts.put_artifact(d)

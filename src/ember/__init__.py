@@ -11,7 +11,7 @@ Two rules keep it what it is:
    no `lumen`: personas reach into ember, and ember reaches a persona over the ground plane —
    the mantle lattice and the wire — rather than by linking. That keeps the dependency graph
    acyclic and ember standalone-deployable. It is architecture, not licence; ember itself is
-   AGPL-3.0-only, because it holds the entroptics instrument (`ember/optics.py`).
+   AGPL-3.0-only, because it holds the instrument (`ember/optics.py`).
 """
 
 # ── the BLAS thread pin — set before numpy is imported ───────────────────────────────────────────
@@ -42,7 +42,7 @@ del _os
 #
 # Why the default exists. Two wire modules take a measurement — `prism.frames.absorb_at_tekton` (the
 # membrane split) and `prism.reach.Provider._route_next` (which tekton couples next). The wire lives
-# in `prism`, which carries no entroptics, so both resolve an injected instrument through
+# in `prism`, which carries no instrument, so both resolve an injected instrument through
 # `prism.instrument`: an explicit keyword first, then this process default, and with neither there
 # is no reading to give. A caller's own `read=` / `dynamics=` / `conservation=` wins over the
 # default.
@@ -53,7 +53,7 @@ del _os
 # needs its own.
 #
 # A factory, not the module. Registering `importlib.import_module("ember.optics")` eagerly would
-# pull numpy and entroptics into a process that only wanted the cache or the runner; the factory
+# pull numpy and the instrument into a process that only wanted the cache or the runner; the factory
 # runs on the first measurement.
 def _register_instrument() -> None:
     import importlib
@@ -113,7 +113,7 @@ from ember.runtime.read_path import Result, answer_query
 from ember.runtime.relay import Channel, Disconnected, MeshChannel
 from mantle.shard.store import ShardStore
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Ember", "NotInitialised",

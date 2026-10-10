@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from prism.source import Observation, Source  # noqa: F401  the contract, single-homed in prism
 
+from ember.lattice_mint import _stored_state
+
 import hashlib
 import os
 import time
@@ -134,7 +136,7 @@ class SourceRuntime:
         self.sources[source.name] = source
         # a source is an artifact too (pluggable, discoverable) — same as operators/MCP servers
         self.store.put_artifact({
-            "id": f"src.{source.name}", "content_type": SOURCE_CONTENT_TYPE, "state": "committed",
+            "id": f"src.{source.name}", "content_type": SOURCE_CONTENT_TYPE, "state": "live",
             "context": f"a {source.kind} source that observes and emits into the store: {source.name}",
             "content": f"source {source.name} kind={source.kind} config={config or {}}",
             "created_by": "ember-local",
@@ -149,7 +151,7 @@ class SourceRuntime:
         obs_list: List[Observation] = []
         for src in self.sources.values():
             for obs in src.poll():
-                doc = obs.to_doc()
+                doc = _stored_state(obs.to_doc())
                 if self.bundle.content is not None and self.bundle.keys_dir is not None:
                     ref, size = C.put_content(self.bundle.content, self.bundle.keys_dir,
                                               obs.content.encode("utf-8"))

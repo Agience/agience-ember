@@ -57,7 +57,7 @@ def _stub_verify(monkeypatch, fn):
     leave the `prism.trust` key pointing at the real verifier, every token would fail to verify,
     and the identity tests would fall through to the commons."""
     mod = types.ModuleType("prism.trust.authority_trust")
-    mod.verify_jwt = fn
+    mod.verify_access_token = fn
     monkeypatch.setitem(sys.modules, "prism.trust.authority_trust", mod)
 
 

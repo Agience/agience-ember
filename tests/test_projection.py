@@ -242,7 +242,7 @@ class _BasisStore:
 
     def __init__(self, B):
         self.doc = {"id": "geom.corpus-basis~stub", "root_id": "geom.corpus-basis",
-                    "content_type": scr.BASIS_CONTENT_TYPE, "state": "committed",
+                    "content_type": scr.BASIS_CONTENT_TYPE, "state": "live",
                     "k": int(B.shape[0]), "d": int(B.shape[1]),
                     "basis": [[float(x) for x in row] for row in B]}
         self.artifacts = self

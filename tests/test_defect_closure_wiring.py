@@ -100,7 +100,7 @@ def test_a_forged_token_falls_through_to_the_commons_not_to_a_person(env_delegat
         _fired.append(tok)
         raise ValueError("signature invalid / unknown key / expired")
 
-    mod.verify_jwt = _boom
+    mod.verify_access_token = _boom
     monkeypatch.setitem(sys.modules, "prism.trust.authority_trust", mod)
 
     d = serve._resolve_delegate(_H({"Authorization": "Bearer forged"}), store=object())
@@ -312,7 +312,7 @@ def test_the_op_prefix_is_load_bearing_for_the_remote_surface():
     s = _FakeStore()
     s.artifacts.put_artifact({"id": "host.gw.op.analyze", "remote": True, "host": "host.gw",
                               "endpoint": "http://10.0.0.7:8083", "operator_name": "analyze",
-                              "state": "committed", "content": ""})
+                              "state": "live", "content": ""})
     assert signal.resolve("host.gw.op.analyze", store=s)["kind"] != "remote"
 
 

@@ -51,7 +51,8 @@ from mantle.services.principal import PERSON_CONTENT_TYPE  # noqa: E402  (a disc
 # so the direction is legal.
 from mantle.db.constants import COLLECTION_CONTENT_TYPE  # noqa: E402  (one home, in the store)
 from ember.lattice_mint import (  # noqa: F401,E402  — re-exported: callers still say `genesis._mint`
-    UNIVERSE, CITATION_CONTENT_TYPE, _author_ref, _ensure_edge, _ensure_private, _mint)
+    UNIVERSE, CITATION_CONTENT_TYPE, _author_ref, _ensure_edge, _ensure_private, _mint,
+    _stored_state)
 # Minting a source's citation anchor and checkpointing which shards are done are store writes whose
 # only caller is the stage-0 ingester. Re-exported so `genesis.mint_source_triple` /
 # `genesis._shards_done` keep resolving.
@@ -384,7 +385,7 @@ def _mint_wordnet_source(store, *, author: str) -> None:
     store.artifacts.put_artifact(evolution.preserve_fitness(store.artifacts, {
         "id": "op.source.wordnet",
         "content_type": OPERATOR_CONTENT_TYPE,
-        "state": "committed",
+        "state": "live",
         "context": "streams Princeton WordNet 3.0 synsets as keyed lexical artifacts "
                    "(Synset/Lexeme) with hypernym/instance_of/antonym/part_of structure",
         "content": "source-operator op.source.wordnet (Stage 0 lexicon coalgebra)",
@@ -458,8 +459,8 @@ def ingest_stage0_wordnet(store, *, author: str = DEFAULT_AUTHOR,
     already = store.artifacts.get_artifact("op.source.wordnet") is not None
     if already and not force:
         # artifacts upsert cleanly, but re-emitting ~100k edges would duplicate them.
-        existing = store.artifacts.count(state="committed")
-        return {"skipped": 1, "reason_already_ingested": 1, "committed": existing}
+        existing = store.artifacts.count(state="live")
+        return {"skipped": 1, "reason_already_ingested": 1, "live": existing}
 
     _mint_wordnet_source(store, author=author)
     # The type comes in WITH the rows that need it: a `text/x-wordnet` row is un-renderable without
@@ -522,7 +523,7 @@ def ingest_stage0_wordnet(store, *, author: str = DEFAULT_AUTHOR,
         docs.append({
             "id": aid,
             "content_type": WORDNET_CONTENT_TYPE,
-            "state": "committed",
+            "state": "live",
             "title": words[0],                   # the primary lemma — a field, carrying no prose
             "gloss": defn,                       # the definition, clean and unstyled
             "content": defn,                     # the information itself — a bare definition
@@ -669,7 +670,7 @@ def ingest_dataset(store, source, *, stage: str, cite_meta: Dict[str, Any], offe
 
     try:
         for obs in source.poll():
-            doc = obs.to_doc()
+            doc = _stored_state(obs.to_doc())
             full = obs.content
             path = (obs.meta or {}).get("title") or (doc.get("id") or "")
             if store.content is not None and store.keys_dir is not None:
@@ -843,7 +844,7 @@ def ingest_sharded(store, *, repo: str, config: str, name: str, stage: str,
                     if not body.strip():
                         continue
                     doc = {"id": rec["id"], "content_type": rec.get("content_type", "text/plain"),
-                           "state": "committed", "context": "", "created_by": "ember-source",
+                           "state": "live", "context": "", "created_by": "ember-source",
                            "title": (rec.get("meta") or {}).get("title", ""), **stamp}
                     if store.content is not None and store.keys_dir is not None:
                         ref, size = C.put_content(store.content, store.keys_dir, body.encode("utf-8"))
@@ -971,7 +972,17 @@ def list_shards(repo: str = "wikimedia/wikipedia", config: str = "20231101.en") 
 # them up automatically, so "Ember takes over ingestion" is: this table + the worker loop.
 
 def _count_in(store, collection_id: str) -> int:
-    return sum(1 for _ in store.artifacts.list_artifacts(collection_id=collection_id))
+    """Members of one collection in every state, archived included, by streaming them.
+
+    The lattice store's `list_artifacts` drops archived rows unless `include_archived=True`; a store
+    whose `list_artifacts` takes no such flag (`mantle.shard.sqlite_store`) already returns every
+    state unfiltered. Either way the answer is the all-states count `count_in_collection` gives."""
+    arts = store.artifacts
+    try:
+        rows = arts.list_artifacts(collection_id=collection_id, include_archived=True)
+    except TypeError:
+        rows = arts.list_artifacts(collection_id=collection_id)
+    return sum(1 for _ in rows)
 
 
 def _promoted(store, collection_id: str) -> bool:
@@ -1088,7 +1099,7 @@ def advance_curriculum(store, *, per_tick: Optional[int] = None,
                 if _stage_done(store, col) and not _promoted(store, col):
                     _mark_promoted(store, col)
                 continue
-            have = _count_collection(store, col, committed_only=False)
+            have = _count_collection(store, col)
             try:
                 r = spec["ingest"](store, have, spec["per_tick"] if per_tick is None else per_tick)
             except Exception as e:
@@ -1100,7 +1111,7 @@ def advance_curriculum(store, *, per_tick: Optional[int] = None,
                 _mark_promoted(store, col)
             return {"stage": col, "source": spec.get("source"), "had": have,
                     "ingested": r.get("ingested", 0),
-                    "now": _count_collection(store, col, committed_only=False),
+                    "now": _count_collection(store, col),
                     "target": spec["target"], "exhausted": promote,
                     # `promoted` is the collection's state — for a shared collection that
                     # is strictly later than this one source's exhaustion.
@@ -1108,10 +1119,10 @@ def advance_curriculum(store, *, per_tick: Optional[int] = None,
         # `_count_collection` is the indexed count. `advance_curriculum` runs every tick under
         # `--ingest` and reads the count twice, so on a multi-million-row stage the streaming form
         # (`_count_in`) would be two full scans per tick.
-        # `committed_only=False` is required, not incidental: `have` is the resume offset passed to
-        # `spec["ingest"](store, have, n)` below, so it counts every state exactly as `_count_in`
-        # does. Anything smaller re-ingests records we already hold.
-        have = _count_collection(store, col, committed_only=False)
+        # Counting every state is required, not incidental: `have` is the resume offset passed to
+        # `spec["ingest"](store, have, n)` below, so it counts exactly as `_count_in` does.
+        # Anything smaller re-ingests records we already hold.
+        have = _count_collection(store, col)
         if have >= spec["target"]:
             if not _promoted(store, col):
                 _mark_promoted(store, col)
@@ -1125,7 +1136,7 @@ def advance_curriculum(store, *, per_tick: Optional[int] = None,
             continue
         # Same call, same semantics as `have` above — `drained = (now <= have)` compares the two,
         # so they must count the same thing or the exhaustion test silently changes meaning.
-        now = _count_collection(store, col, committed_only=False)
+        now = _count_collection(store, col)
         # Promote when the target is met or the source is exhausted (a tick added no net-new
         # artifacts). Exhaustion matters because a source can hold fewer items than the target
         # (e.g. Simple Wikipedia ~41k against a 60k target); it is what lets the worker advance
@@ -1318,7 +1329,7 @@ def _register_control_operators_inner(store, author, evolution) -> int:
     for name, offer in CONTROL_OPS:
         existing = store.artifacts.get_artifact(name)
         doc = {
-            "id": name, "content_type": OPERATOR_CONTENT_TYPE, "state": "committed",
+            "id": name, "content_type": OPERATOR_CONTENT_TYPE, "state": "live",
             "context": offer, "content": f"control operator {name}: {offer}",
             "provenance": P_HUMAN, "cited_from": CITE_GENESIS,
             "created_by": author,
@@ -1393,7 +1404,7 @@ def remember(store, text: str, *, principal: Optional[str] = None) -> Dict[str, 
     # grounded in the owner's gated private collection, so `access.is_public` is False and only the
     # owner's light-cone reaches it. Authorship is provenance — `created_by` is a vertex reference
     # (§2.1) that resolves, so it is the person artifact's id rather than the raw principal.
-    doc = {"id": mid, "content_type": "text/markdown", "state": "committed", "context": "",
+    doc = {"id": mid, "content_type": "text/markdown", "state": "live", "context": "",
            "content": "", "lemmas": lemmas, "collection_id": pid, "collections": [pid],
            "cited_from": cite, "via": "op.remember", "operator": "op.remember",
            "provenance": P_HUMAN,       # ownership is the grant on `pid`; authorship is `created_by`
@@ -1485,13 +1496,13 @@ def status(store) -> Dict[str, Any]:
     #     SELECT count(*) FROM Artifact WHERE state = ?  -> FETCH FROM INDEX -> EXTRACT VALUE FROM
     #                                                       INDEX ENTRY -> FILTER ITEMS BY TYPE
     #                                                       i.e. dereference every matched row
-    # Any `WHERE` takes the count off the O(1) metadata path, and `state='committed'` is the least
+    # Any `WHERE` takes the count off the O(1) metadata path, and `state='live'` is the least
     # selective predicate available — 5,670,283 rows / 103.03s for exactly this query — which is a
     # ~100s scan on a 30s timer.
-    # So "artifacts" means all artifacts rather than committed-only: that is what the field is
-    # called and what /status shows, and the non-committed remainder is a rounding error against
-    # 6.2M. A selective count (e.g. `state='archived'`, 2,292 rows / 0.41s) is still cheap and can
-    # be added if the committed/draft split is ever needed.
+    # So "artifacts" means all artifacts rather than live-only: that is what the field is called
+    # and what /status shows, and the archived remainder is a rounding error against 6.2M. A
+    # selective count (e.g. `state='archived'`, 2,292 rows / 0.41s) is still cheap and can be added
+    # if the live/archived split is ever needed.
     total = _count_artifacts_cached(store)
     stages = []
     for spec in CURRICULUM:
@@ -1730,8 +1741,8 @@ def health(store) -> Dict[str, Any]:
     }
 
 
-def _count_collection(store, collection_id: str, *, committed_only: bool = True) -> int:
-    """Indexed count for one collection. `committed_only=False` matches `_count_in` exactly.
+def _count_collection(store, collection_id: str) -> int:
+    """Indexed count for one collection, over every state. It matches `_count_in` exactly.
 
     The `WHERE collection_id` is what makes this tractable — selectivity (§3): an index helps on a
     *selective* value. Measured on T5:
@@ -1749,10 +1760,9 @@ def _count_collection(store, collection_id: str, *, committed_only: bool = True)
     heap-starved node the selective query above also times out — that is the heap, and the same
     schema and a comparable corpus run it in 22s on T5.)
 
-    `committed_only` exists because the two callers need different things, and the difference is
-    load-bearing: `advance_curriculum` uses the count as its resume offset, so it counts every
-    state. Filtering to `committed` there would under-count, hand the ingester a low offset, and
-    re-ingest records it already has.
+    Counting every state is load-bearing: `advance_curriculum` uses the count as its resume offset.
+    Filtering to `live` there would under-count, hand the ingester a low offset, and re-ingest
+    records it already has.
 
     `count_in_collection` is a counter maintained inside the write transaction: O(1), and it answers
     exactly the question asked. A per-collection count that silently degraded to the global corpus
@@ -1763,18 +1773,12 @@ def _count_collection(store, collection_id: str, *, committed_only: bool = True)
     `global - real`, so it grows with the corpus and is largest for the emptiest stage."""
     cnt = _typed(store.artifacts, "count_in_collection")
     if cnt is not None:
-        # `committed_only` maps onto the lattice store's `committed_only` flag rather than onto a
-        # `state = 'committed'` predicate. The flag selects a separate counter maintained at write
-        # time, so the unselective predicate (5,670,283 rows / 103.03s) is never issued, and the
-        # count stays independent of whether `state` remains a queryable column.
-        return int(cnt(collection_id, committed_only=committed_only))
-    # No typed counter: stream the collection through Python. Honest but O(n) — this is the
-    # `_count_in` the indexed form replaced, kept as a last resort for the in-memory fakes.
-    # `_count_in` counts every state, so `committed_only=True` is satisfied by filtering here
-    # rather than by returning the all-states number under a committed-only name.
-    if committed_only:
-        return sum(1 for a in store.artifacts.list_artifacts(collection_id=collection_id)
-                   if a.get("state") == "committed")
+        # The all-states counter is maintained at write time, so no `state` predicate is issued
+        # (the unselective one measured 5,670,283 rows / 103.03s), and the count stays independent
+        # of whether `state` remains a queryable column.
+        return int(cnt(collection_id))
+    # No typed counter: stream the collection through Python. O(n) — this is the `_count_in` the
+    # indexed form replaced, kept as a last resort for the in-memory fakes.
     return _count_in(store, collection_id)
 
 
@@ -1837,7 +1841,7 @@ def _count_collection_cached(store, collection_id: str, *, allow_scan: bool = Fa
         if ent is not None and now - ent["at"] <= _COLLECTION_COUNT_TTL and collection_id in ent["vals"]:
             return ent["vals"][collection_id]
     except TypeError:                       # store not weak-referenceable -> never cache
-        return _count_collection(store, collection_id, committed_only=False) if allow_scan else None
+        return _count_collection(store, collection_id) if allow_scan else None
     # The cache alone would still leave the first call per window paying the full scan, and on a
     # heap-starved node that one call is fatal. Measured via EXPLAIN on T5, this count is planned as
     #   FETCH FROM INDEX Artifact[collection_id] -> EXTRACT VALUE FROM INDEX ENTRY -> FILTER BY TYPE
@@ -1852,7 +1856,7 @@ def _count_collection_cached(store, collection_id: str, *, allow_scan: bool = Fa
     # deliberate — 0 would read as "this stage is empty", which is a measurement nobody took.
     if not allow_scan:
         return None
-    val = _count_collection(store, collection_id, committed_only=False)
+    val = _count_collection(store, collection_id)
     try:
         ent = _COLLECTION_COUNT_CACHE.get(store)
         if ent is None or now - ent["at"] > _COLLECTION_COUNT_TTL:
@@ -1884,11 +1888,11 @@ _NULL_SCAN_CAP = 250_000
 
 
 def _count_null(store, field: str, *, allow_scan: bool = False):
-    """Count committed rows missing `field` (the cited_from/provenance backfill audit).
+    """Count rows missing `field` (the cited_from/provenance backfill audit).
 
     This query is known-unservable, so it is issued only on the slow path. Both halves defeat every
     index available: `IS NULL` cannot use an LSM index at all (nullStrategy SKIP — nulls are not
-    stored), and `state = 'committed'` matches nearly all rows, so it prunes nothing (measured:
+    stored), and `state = 'live'` matches nearly all rows, so it prunes nothing (measured:
     5,670,283 rows, 103.03s). Given that, the move is to keep it off the hot path rather than to
     time it or cache it after the fact.
 
@@ -1935,13 +1939,12 @@ def _count_null(store, field: str, *, allow_scan: bool = False):
 def _scan_missing_field(store, field: str):
     """Rows missing `field`. Returns an int, or None meaning not measured.
 
-    The scan counts rows missing `field` across every state rather than committed-only. On a store
-    where `state` is not a queryable column there is no way to express "committed rows missing
-    `field`", and a substitute — treating every row as committed, or sniffing a `state` key out of
-    the doc JSON and calling it a predicate — would rebuild the unselective predicate under a new
-    name.
+    The scan counts rows missing `field` across every state rather than live-only. On a store where
+    `state` is not a queryable column there is no way to express "live rows missing `field`", and a
+    substitute — treating every row as live, or sniffing a `state` key out of the doc JSON and
+    calling it a predicate — would rebuild the unselective predicate under a new name.
 
-    The all-states count is a superset of the committed-only answer, and the direction matters: the
+    The all-states count is a superset of the live-only answer, and the direction matters: the
     only consumer is `invariant_holds = (miss_cite == 0 and miss_prov == 0)`, so a superset can
     raise a false alarm while a clean audit over a dirty corpus stays out of reach. Fail-safe in the
     right direction.
@@ -2329,7 +2332,7 @@ def define_operator(store, op_id: str, kind: str, spec: Dict[str, Any], *, offer
     from ember.runtime.runner import evolution
     updating = store.artifacts.get_artifact(op_id) is not None
     doc = evolution.preserve_fitness(store.artifacts, {
-        "id": op_id, "content_type": OPERATOR_CONTENT_TYPE, "state": "committed",
+        "id": op_id, "content_type": OPERATOR_CONTENT_TYPE, "state": "live",
         "kind": kind, "spec": spec, "context": offer or f"{kind} operator {op_id}",
         "content": f"{kind} operator {op_id} (data-driven): {offer}",
         "lemmas": [op_id.replace("op.", "").replace(".", " ").split()[0] if "." in op_id else op_id],
@@ -2402,12 +2405,12 @@ CITE_UNKNOWN = "cite.unknown"          # honest anchor: "source was never record
 
 
 def audit_provenance(store) -> Dict[str, Any]:
-    """Scan the committed corpus for the §12 invariant: every artifact carries a `cited_from`
+    """Scan the live corpus for the §12 invariant: every artifact carries a `cited_from`
     AND a `provenance`. Returns counts + a sample of any violators. Deterministic."""
     total = missing_cite = missing_prov = 0
     by_type: Dict[str, int] = {}
     samples: List[Dict[str, Any]] = []
-    for a in store.artifacts.list_artifacts(state="committed"):
+    for a in store.artifacts.list_artifacts(state="live"):
         total += 1
         mc = not a.get("cited_from")
         mp = not a.get("provenance")
@@ -2444,7 +2447,7 @@ def backfill_provenance(store, *, apply: bool = False, author: str = DEFAULT_AUT
             "lemmas": ["unknown", "source"], "content": "provenance was never recorded",
             "provenance": P_UNKNOWN, "cited_from": CITE_GENESIS, "created_by": author})
     fixed_system = fixed_content = 0
-    for a in store.artifacts.list_artifacts(state="committed"):
+    for a in store.artifacts.list_artifacts(state="live"):
         if a.get("cited_from") and a.get("provenance"):
             continue
         ct = a.get("content_type", "")
@@ -2586,14 +2589,14 @@ def all_metrics(store, *, cache_ok: bool = True, sample: Optional[int] = _METRIC
     # Sampled, rather than a full-byte scan. ρ, keyed_coverage and dark_matter are ratios, and a
     # ratio does not need the population: a bounded sample estimates it to within a fraction of a
     # percent at 1/300th of the cost.
-    # Walking every committed row (6.19M), hydrating each into a dict and summing its bytes, takes
+    # Walking every live row (6.19M), hydrating each into a dict and summing its bytes, takes
     # longer than the 300s loop that drove it, so scans stacked on each other. Measured on T5: the
     # store pinned at ~713% CPU with 4 request threads and 4 GC threads saturated while the
     # aggregator managed ~114 docs/sec, and stopping the aggregator changed nothing.
     # The result is labelled `sampled` with its n, because an estimate presented as a census is the
     # same class of error as an unmeasured value presented as zero.
     limit = None if sample is None else int(sample)
-    for a in store.artifacts.list_artifacts(state="committed", limit=limit):
+    for a in store.artifacts.list_artifacts(state="live", limit=limit):
         b = _artifact_bytes(a)
         isgen = a["id"] not in consolidated
         iscontent = a.get("content_type") not in _NON_CONTENT_CT
@@ -2694,7 +2697,7 @@ def register_consolidate_operators(store, *, author: str = DEFAULT_AUTHOR) -> in
     with system_custody_if_unowned("ember.register_consolidate_operators"):
         for name, offer in CONSOLIDATE_OPS:
             store.artifacts.put_artifact(evolution.preserve_fitness(store.artifacts, {
-                "id": name, "content_type": OPERATOR_CONTENT_TYPE, "state": "committed",
+                "id": name, "content_type": OPERATOR_CONTENT_TYPE, "state": "live",
                 "context": offer, "content": f"consolidation operator {name}: {offer}",
                 "provenance": P_HUMAN, "cited_from": CITE_GENESIS,
                 "created_by": author, "created_time": _now(),
@@ -2759,7 +2762,7 @@ def consolidate_nearvdup(store, *, content_type: str = "text/markdown",
     # "consolidated N groups" needs `truncated` beside it. The cap stays: it bounds real work on a
     # 5.8 GB store.
     _scan = [a for a in store.artifacts.list_artifacts(content_type=content_type,
-                                                       collection_id=collection_id, state="committed")
+                                                       collection_id=collection_id, state="live")
              if access.is_public(store, a)][:limit + 1]   # never consolidate non-public data up
     truncated = len(_scan) > limit
     arts = _scan[:limit]
@@ -3073,7 +3076,7 @@ def consolidate_crosswalk(store, *, apply: bool = False, limit: int = 20000,
         members = [art_id] + syn_ids
         canon = "concept-" + _now_hash(members)
         concepts.append({
-            "id": canon, "content_type": "application/x-concept", "state": "committed",
+            "id": canon, "content_type": "application/x-concept", "state": "live",
             "context": {"name": word, "kind": "concept", "colimit_of": members,
                         "sources": ["wikipedia", "wordnet"], "provenance": P_HYPOTHESIS},
             "lemmas": [word], "content": f"canonical concept '{word}' (colimit of {len(members)} sources)",

@@ -330,7 +330,7 @@ def answers_artifact(result: Dict[str, Any], *, principal: str = "") -> dict:
         "id": "cuddler.answers.%s.%s" % (qid,
                                          _now().replace(":", "").replace("-", "")[:15]),
         "content_type": ANSWER_CONTENT_TYPE,
-        "state": "committed",
+        "state": "live",
         "questionnaire": qid,
         "outputs": result.get("outputs", {}),
         "path": result.get("path", []),

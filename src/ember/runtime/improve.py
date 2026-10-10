@@ -52,7 +52,7 @@ def metrics(bundle, *, cache_ok: bool = True) -> Dict:
     ratios over the whole corpus — every artifact contributes bytes, so bounding the scan would
     change the number itself, not just its cost, making it a different metric rather than a faster
     one. Nothing here is index-servable either (`lemmas IS NULL` can never be index-served, LSM
-    nullStrategy is SKIP; state='committed' matches nearly every row and prunes nothing). The cache
+    nullStrategy is SKIP; state='live' matches nearly every row and prunes nothing). The cache
     is therefore the whole mitigation, and its cadence matters: improve_cycle (every worker tick)
     and browse.status_page (every /status load, and that page self-refreshes every 180s) plus
     serve's own 300s improve.start loop all call in. A TTL of 90s means a tick faster than that
@@ -77,7 +77,7 @@ def metrics(bundle, *, cache_ok: bool = True) -> Dict:
     dark = keyed = content_docs = 0
     total_bytes = gen_bytes = 0
     fitnesses: List[float] = []
-    for a in store.list_artifacts(state="committed"):
+    for a in store.list_artifacts(state="live"):
         total += 1
         ct = a.get("content_type", "?")
         by_type[ct] = by_type.get(ct, 0) + 1
@@ -119,7 +119,7 @@ def metrics(bundle, *, cache_ok: bool = True) -> Dict:
 def counts_fast(bundle) -> Dict:
     """Live artifact counts from the maintained `counter` table, with no corpus scan.
 
-    `metrics()` streams every committed artifact to sum bytes for rho; on 6.25M rows that takes
+    `metrics()` streams every live artifact to sum bytes for rho; on 6.25M rows that takes
     minutes, and the status page calls it on every load, so a cold cache hangs the page. The counts
     the page needs (total, per-type, per-collection) are already maintained incrementally in the
     `counter` table (`vertex`, `ct:<type>`, `col:<name>`), read here directly. Falls back to `{}`
@@ -136,7 +136,7 @@ def counts_fast(bundle) -> Dict:
                 out["total_artifacts"] = n
             elif name.startswith("ct:"):
                 out["by_content_type"][name[3:]] = n
-            elif name.startswith("col:") and ":" not in name[4:]:   # `col:foundation`, not `col:foundation:committed`
+            elif name.startswith("col:") and ":" not in name[4:]:   # `col:foundation`, not a state-scoped `col:foundation:<state>`
                 out["collections"][name[4:]] = n
     except Exception:
         return {}

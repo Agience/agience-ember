@@ -29,11 +29,11 @@ def _store(tmp_path, *, synsets=3, distractors=60):
     L.artifacts.ensure_schema()
     docs = []
     for i in range(synsets):
-        docs.append({"id": "wn-dog.n.%02d" % (i + 1), "content_type": WN, "state": "committed",
+        docs.append({"id": "wn-dog.n.%02d" % (i + 1), "content_type": WN, "state": "live",
                      "word": "dog", "pos": "n", "lemmas": ["dog", "canine"],
                      "content": "dog — a domesticated carnivore %d" % i})
     for i in range(distractors):
-        docs.append({"id": "wiki-%05d" % i, "content_type": WIKI, "state": "committed",
+        docs.append({"id": "wiki-%05d" % i, "content_type": WIKI, "state": "live",
                      "lemmas": ["dog", "misc"], "content": "Dog (disambiguation) %d" % i})
     L.artifacts.put_many(docs, batch=200)
     return L
@@ -102,7 +102,7 @@ def test_index_follows_updates_and_deletes(tmp_path):
     L = _store(tmp_path, synsets=1, distractors=0)
     assert L.artifacts.lookup_by_lemma("dog", limit=5, content_type=WN)
 
-    L.artifacts.put_artifact({"id": "wn-dog.n.01", "content_type": WN, "state": "committed",
+    L.artifacts.put_artifact({"id": "wn-dog.n.01", "content_type": WN, "state": "live",
                               "word": "cat", "lemmas": ["cat"], "content": "cat — feline"})
     assert L.artifacts.lookup_by_lemma("dog", limit=5, content_type=WN) == [], \
         "a stale lemma posting survived an update"
@@ -115,7 +115,7 @@ def test_index_follows_updates_and_deletes(tmp_path):
 def test_ct_change_repoints_the_discriminator(tmp_path):
     """An update that changes `content_type` moves the row's postings with it."""
     L = _store(tmp_path, synsets=1, distractors=0)
-    L.artifacts.put_artifact({"id": "wn-dog.n.01", "content_type": WIKI, "state": "committed",
+    L.artifacts.put_artifact({"id": "wn-dog.n.01", "content_type": WIKI, "state": "live",
                               "lemmas": ["dog"], "content": "now a wiki row"})
     assert L.artifacts.lookup_by_lemma("dog", limit=5, content_type=WN) == []
     assert len(L.artifacts.lookup_by_lemma("dog", limit=5, content_type=WIKI)) == 1

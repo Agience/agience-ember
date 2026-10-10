@@ -39,8 +39,18 @@ UNIVERSE = "universe"
 CITATION_CONTENT_TYPE = "application/x-citation"
 
 
+def _stored_state(doc: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve `doc["state"]` to a stored state, in place, and return the doc.
+
+    Stored artifact states are `live` and `archived`, and the store does not normalise on write.
+    `archived` is kept; any other value, or none, is written `live`. A doc built elsewhere can carry
+    a legacy value: `prism.source.Observation.to_doc()` below prism 0.1.3 writes `committed`."""
+    doc["state"] = "archived" if doc.get("state") == "archived" else "live"
+    return doc
+
+
 def _mint(store, doc: Dict[str, Any]) -> None:
-    doc.setdefault("state", "committed")
+    doc.setdefault("state", "live")
     doc.setdefault("created_time", _now())
     doc.setdefault("modified_time", doc["created_time"])
     doc.setdefault("provenance", P_HUMAN)
@@ -158,7 +168,7 @@ def _shards_done(store, name: str) -> List[str]:
 
 
 def _mark_shard_done(store, name: str, shard: str) -> None:
-    # idempotent, contention-free: each completed shard is its own committed artifact.
+    # idempotent, contention-free: each completed shard is its own live artifact.
     #
     # THE LABEL IS AN `offer`, NOT `content` — corrected 2026-08-26. It read
     # `"content": f"shard done: {name}/{shard}"`, which is a TITLE: it says nothing that
@@ -174,7 +184,7 @@ def _mark_shard_done(store, name: str, shard: str) -> None:
     # on 71/home read `content: ''` with a `content_ref` set, so this string is not what those rows
     # carry — the literal here had drifted away from what the store actually holds.
     store.artifacts.put_artifact({
-        "id": _shard_done_id(name, shard), "content_type": SHARD_DONE_CT, "state": "committed",
+        "id": _shard_done_id(name, shard), "content_type": SHARD_DONE_CT, "state": "live",
         "source_name": name, "shard": shard, "offer": f"shard done: {name}/{shard}",
         "provenance": P_HUMAN, "cited_from": CITE_GENESIS, "created_time": _now()})
 
@@ -199,7 +209,7 @@ def mint_source_triple(store, name: str, *, cite_meta: Dict[str, Any], offer: st
     store.artifacts.put_artifact(evolution.preserve_fitness(store.artifacts, {
         "id": f"op.source.{name}",
         "content_type": evolution.OPERATOR_CONTENT_TYPE,   # from the bundle; mantle may not import crystal
-        "state": "committed",
+        "state": "live",
         "context": offer,
         "content": f"source-operator op.source.{name}: {offer}",
         "provenance": P_HUMAN, "created_by": author, "created_time": _now(),

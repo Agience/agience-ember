@@ -24,7 +24,7 @@ from ember.consolidate import diagram as D            # noqa: E402
 
 # ── the synthetic corpus ─────────────────────────────────────────────────────────────────────────
 def _mk(store, aid, **kw):
-    doc = {"id": aid, "content_type": "text/x-wordnet", "state": "active"}
+    doc = {"id": aid, "content_type": "text/x-wordnet", "state": "live"}
     doc.update(kw)
     store.artifacts.put_many([doc], batch=1)
     return aid
@@ -32,7 +32,7 @@ def _mk(store, aid, **kw):
 
 def _anchor(store, lemma, concept):
     """`lemma:<form> --lex:en--> <concept>` — the shared vertex, as a real edge in the lattice."""
-    store.artifacts.put_many([{"id": lemma, "content_type": "text/x-lemma", "state": "active"}],
+    store.artifacts.put_many([{"id": lemma, "content_type": "text/x-lemma", "state": "live"}],
                              batch=1)
     store.graph.add_edges([(lemma, concept, D.ANCHOR_LABEL, {})], batch=8)
 
@@ -221,6 +221,33 @@ def test_colimit_carries_provenance_position_mass_and_a_morphism_from_each_membe
     assert {m[1] for m in built["morphisms"]} == {"pwn-e", "oewn-e"}
     assert all(m[2] == C.COLIMIT_LABEL for m in built["morphisms"])
     assert doc["colimit_of"] == ["oewn-e", "pwn-e"]
+
+
+def _archive(store, aid):
+    doc = store.artifacts.get_artifact(aid)
+    doc["state"] = "archived"
+    store.artifacts.put_many([doc], batch=1)
+
+
+@pytest.mark.parametrize("archived", ["oewn-e", "pwn-e"], ids=["archived-sorts-first",
+                                                                "archived-sorts-second"])
+def test_one_live_member_keeps_the_colimit_live_in_either_id_order(twins, archived):
+    """One archived member and one live member give a live colimit, whichever of the two sorts
+    first. Members are read in id order, so a state taken from the first member would archive the
+    colimit in exactly one of these two cases."""
+    _archive(twins, archived)
+    assert twins.artifacts.get_artifact(archived)["state"] == "archived"
+    doc = C.colimit(twins, ["pwn-e", "oewn-e"], **ARM)["doc"]
+    assert doc["state"] == "live"
+
+
+def test_the_colimit_is_archived_only_when_every_member_is(twins):
+    """The positive control for the test above: with every member archived the colimit is archived,
+    so the live answer there is the rule and not a constant."""
+    _archive(twins, "pwn-e")
+    _archive(twins, "oewn-e")
+    doc = C.colimit(twins, ["pwn-e", "oewn-e"], **ARM)["doc"]
+    assert doc["state"] == "archived"
 
 
 def test_colimit_id_is_a_function_of_the_diagram_not_the_clock(twins):

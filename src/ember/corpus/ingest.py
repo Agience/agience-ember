@@ -496,20 +496,20 @@ def ingest_to_store(paths=None, *, wordnet: bool = False, wiki_dump: Optional[st
     index_rows: List[Tuple[str, bytes, str]] = []           # (id, content_bytes, offer) for the index
     if paths:
         for aid, ct, offer, content, op_name in _observe_files([paths] if isinstance(paths, str) else list(paths)):
-            docs.append({"id": aid, "content_type": ct, "state": "committed",
+            docs.append({"id": aid, "content_type": ct, "state": "live",
                          "context": offer, "content": content, "created_by": "ember-local"})
             edges.append((aid, op_name, "operator", {"at": "first-observation"}))
             index_rows.append((aid, content.encode("utf-8"), offer))
     if wordnet:
         for aid, content_bytes, offer, meta in wordnet_items():
-            docs.append({"id": aid, "content_type": "text/x-wordnet", "state": "committed",
+            docs.append({"id": aid, "content_type": "text/x-wordnet", "state": "live",
                          "context": offer, "content": content_bytes.decode("utf-8", "ignore"),
                          "created_by": "ember-local",
                          "lemmas": meta["lemmas"], "word": meta["word"], "pos": meta["pos"]})
             index_rows.append((aid, content_bytes, offer))
     if wiki_dump:
         for aid, content_bytes, offer in wikipedia_items(wiki_dump):
-            docs.append({"id": aid, "content_type": "text/x-wikipedia", "state": "committed",
+            docs.append({"id": aid, "content_type": "text/x-wikipedia", "state": "live",
                          "context": offer, "content": content_bytes.decode("utf-8", "ignore"),
                          "created_by": "ember-local"})
             index_rows.append((aid, content_bytes, offer))
@@ -543,15 +543,16 @@ def ingest_to_store(paths=None, *, wordnet: bool = False, wiki_dump: Optional[st
 def _offer_text(raw) -> str:
     """The offer an artifact is indexed by — the caller's description, not the store's mint record.
 
-    The raw context is not the offer. Mantle stamps a context onto every create
-    (`artifacts_router._mint_context`) and keeps the caller's own "verbatim under `caller`", so an
-    artifact written through the API stores something like:
+    The raw context is not the offer. Mantle stamps its own facets onto every create — through the
+    API and in-process alike — beside the caller's keys, so a stored context looks like:
 
         {"minted_by": "mantle.mint_context", "minted": {"at": ..., "principal_id": ...},
-         "addressing": {...}, "provenance": "unknown", "caller": {THE ACTUAL DESCRIPTION}}
+         "addressing": {...}, "provenance": "unknown", THE CALLER'S KEYS}
 
     Handing that whole string to `emb.encode` makes the retrieval vector encode a principal UUID
-    and a timestamp instead of what the artifact is about.
+    and a timestamp instead of what the artifact is about. So the offer is mantle's client view
+    (`mantle.services.mint_context.client_view`): the caller's keys wherever the context holds
+    them, with every key the store owns removed.
 
     Measured against `/opt/agience/brain/lattice.db`, which is this node's store
     (`EMBER_SQLITE_DIR=/opt/agience/brain` — ember and mantle share it): **129 of 196 artifacts
@@ -559,13 +560,19 @@ def _offer_text(raw) -> str:
     rather than live: the index is only rebuilt on demand, so an unflattened context first shows up
     at the next `rebuild_index_from_store`, which is exactly when nobody is looking for it.
 
-    Both shapes are live. A `PATCH` does not mint and pre-mint artifacts were never minted, so 67
-    of those contexts are the caller's own at the top level. An artifact with no `caller` block is
-    returned unchanged.
+    Every shape is live, and the view reads them all: the caller's keys at the top level, under
+    `caller` alone, or some in each (the top level wins, and `caller` supplies a key the top level
+    does not hold). A context with no store-owned key and no `caller` block is returned unchanged;
+    one that holds nothing but the store's own facets has no offer and returns "".
 
     Returns text, not a dict: `emb.encode` takes strings. A dict is re-serialised rather than
-    str()'d so the offer stays JSON rather than becoming Python-repr with single quotes.
+    str()'d so the offer stays JSON rather than becoming Python-repr with single quotes, with
+    mantle's own separators (`json.dumps` defaults, as `mint_context` writes a context) and its
+    characters as written (`ensure_ascii=False`): an escaped character is not the word the writer
+    used.
     """
+    from mantle.services.mint_context import client_view
+
     if not raw:
         return ""
     parsed = raw
@@ -576,10 +583,10 @@ def _offer_text(raw) -> str:
             return raw          # an opaque, non-JSON context IS the caller's own text
     if not isinstance(parsed, dict):
         return raw if isinstance(raw, str) else ""
-    caller = parsed.get("caller")
-    if not isinstance(caller, dict) or not caller:
-        return raw if isinstance(raw, str) else json.dumps(parsed)
-    return json.dumps(caller)
+    view = client_view(parsed)
+    if view == parsed:
+        return raw if isinstance(raw, str) else json.dumps(parsed, ensure_ascii=False)
+    return json.dumps(view, ensure_ascii=False) if view else ""
 
 
 def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Optional[AnchorSet] = None, batch: int = 1000):
@@ -598,7 +605,7 @@ def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Op
     # index is touched. A precondition checked after the destructive step is not a precondition.
     rows: List[Tuple[str, bytes, str]] = []
     rungs: List[str] = []
-    for a in store.artifacts.list_artifacts(state="committed"):
+    for a in store.artifacts.list_artifacts(state="live"):
         if a.get("content_type") == ops.OPERATOR_CONTENT_TYPE:  # skip operator artifacts in the retrieval index
             continue
         offer = _offer_text(a.get("context"))

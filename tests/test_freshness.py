@@ -52,15 +52,15 @@ def _keyed(L):
     from crystal.ontology import driver as wn
     L.artifacts.put_artifact({
         "id": wn._TRANSDUCER_ID, "content_type": "application/x-transducer",
-        "state": "committed", "spec": {"kind": "language", "lang": "en"}})
+        "state": "live", "spec": {"kind": "language", "lang": "en"}})
     return L
 
 
 def _seed(L, ic=1.0):
     L.artifacts.put_many([
-        {"id": "wn-root.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-root.n.01", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["root"], "lemma_counts": {"root": 1}, "hypernyms": [], "ic": 0.0},
-        {"id": "wn-thing.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-thing.n.01", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["thing"], "lemma_counts": {"thing": 1},
          "hypernyms": ["root.n.01"], "ic": float(ic)},
     ])
@@ -97,7 +97,7 @@ def test_write_mark_moves_on_every_write_and_only_on_a_write(tmp_path):
     L.artifacts.get_artifact("wn-thing.n.01")
     assert fr.write_mark(L.artifacts) == m0, "a READ moved the write mark"
 
-    L.artifacts.put_artifact({"id": "wn-thing.n.01", "content_type": WN, "state": "committed",
+    L.artifacts.put_artifact({"id": "wn-thing.n.01", "content_type": WN, "state": "live",
                               "pos": "n", "lemmas": ["thing"], "hypernyms": ["root.n.01"],
                               "ic": 7.0})
     m1 = fr.write_mark(L.artifacts)
@@ -155,7 +155,7 @@ def test_a_repair_written_by_another_handle_reaches_a_warm_reader(tmp_path):
 
     writer = _lattice(tmp_path)                      # a second handle: the reader is never told
     writer.artifacts.put_artifact({
-        "id": "wn-thing.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        "id": "wn-thing.n.01", "content_type": WN, "state": "live", "pos": "n",
         "lemmas": ["thing"], "hypernyms": ["root.n.01"], "ic": 9.5})
 
     assert wn.synset("thing.n.01").ic() == 9.5, (
@@ -194,9 +194,9 @@ def test_an_edge_only_write_invalidates_the_synset(tmp_path):
     from crystal.ontology import driver as wn
     reader = _keyed(_lattice(tmp_path))
     reader.artifacts.put_many([
-        {"id": "wn-root.n.01", "content_type": WN, "state": "committed", "pos": "n", "ic": 0.0},
-        {"id": "wn-leaf.n.01", "content_type": WN, "state": "committed", "pos": "n", "ic": 3.0},
-        {"id": "wn-alt.n.01", "content_type": WN, "state": "committed", "pos": "n", "ic": 1.0},
+        {"id": "wn-root.n.01", "content_type": WN, "state": "live", "pos": "n", "ic": 0.0},
+        {"id": "wn-leaf.n.01", "content_type": WN, "state": "live", "pos": "n", "ic": 3.0},
+        {"id": "wn-alt.n.01", "content_type": WN, "state": "live", "pos": "n", "ic": 1.0},
     ])
     reader.graph.add_edge("wn-leaf.n.01", "wn-root.n.01", "hypernym", {})
     wn.bind(reader)
@@ -230,7 +230,7 @@ def test_the_coordinate_moves_with_the_ic_it_is_built_from(tmp_path):
 
     writer = _lattice(tmp_path)
     writer.artifacts.put_artifact({
-        "id": "wn-thing.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        "id": "wn-thing.n.01", "content_type": WN, "state": "live", "pos": "n",
         "lemmas": ["thing"], "hypernyms": ["root.n.01"], "ic": 9.5})
 
     v1 = g.dense_vec(wn.synset("thing.n.01"), ic)
@@ -247,9 +247,9 @@ def test_an_ancestors_repair_reaches_a_childs_coordinate(tmp_path):
     from crystal.ontology import geometry as g
     reader = _keyed(_lattice(tmp_path))
     reader.artifacts.put_many([
-        {"id": "wn-mid.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-mid.n.01", "content_type": WN, "state": "live", "pos": "n",
          "hypernyms": [], "ic": 1.0},
-        {"id": "wn-kid.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-kid.n.01", "content_type": WN, "state": "live", "pos": "n",
          "hypernyms": ["mid.n.01"], "ic": 5.0},
     ])
     wn.bind(reader)
@@ -257,7 +257,7 @@ def test_an_ancestors_repair_reaches_a_childs_coordinate(tmp_path):
     v0 = g.dense_vec(wn.synset("kid.n.01"), ic)
 
     writer = _lattice(tmp_path)                       # only the parent is repaired
-    writer.artifacts.put_artifact({"id": "wn-mid.n.01", "content_type": WN, "state": "committed",
+    writer.artifacts.put_artifact({"id": "wn-mid.n.01", "content_type": WN, "state": "live",
                                    "pos": "n", "hypernyms": [], "ic": 4.5})
 
     v1 = g.dense_vec(wn.synset("kid.n.01"), ic)
@@ -308,7 +308,7 @@ def test_the_corpus_basis_follows_the_artifact(tmp_path):
                 "basis": [[float(i == j) for j in range(d)] for i in range(k)]}
 
     reader = _lattice(tmp_path)
-    reader.artifacts.put_artifact(dict(body(3, 8), id=pj.BASIS_ROOT, state="committed"))
+    reader.artifacts.put_artifact(dict(body(3, 8), id=pj.BASIS_ROOT, state="live"))
     B0 = pj.load_basis(reader)
     assert B0.shape == (3, 8)
     assert pj.load_basis(reader) is B0, "the basis was re-hydrated with nothing written"
@@ -332,12 +332,12 @@ def test_offers_follow_an_edited_operator_without_anyone_calling_invalidate(tmp_
     from ember.ontology import match as m
     OP = "application/vnd.agience.operator+json"
     reader = _lattice(tmp_path)
-    reader.artifacts.put_artifact({"id": "op.alpha", "content_type": OP, "state": "committed",
+    reader.artifacts.put_artifact({"id": "op.alpha", "content_type": OP, "state": "live",
                                    "context": "dog"})
     assert m._offers(reader, refresh=True)["n"] == 1
 
     writer = _lattice(tmp_path)
-    writer.artifacts.put_artifact({"id": "op.beta", "content_type": OP, "state": "committed",
+    writer.artifacts.put_artifact({"id": "op.beta", "content_type": OP, "state": "live",
                                    "context": "cat"})
     assert m._offers(reader)["n"] == 2, (
         "a newly written operator stayed invisible — invalidate() is not being called and must "
@@ -351,12 +351,12 @@ def test_offers_are_not_rebuilt_when_nothing_of_that_type_was_written(tmp_path):
     from ember.ontology import match as m
     OP = "application/vnd.agience.operator+json"
     reader = _lattice(tmp_path)
-    reader.artifacts.put_artifact({"id": "op.alpha", "content_type": OP, "state": "committed",
+    reader.artifacts.put_artifact({"id": "op.alpha", "content_type": OP, "state": "live",
                                    "context": "dog"})
     first = m._offers(reader, refresh=True)
 
     writer = _lattice(tmp_path)                       # a write of an unrelated type
     writer.artifacts.put_artifact({"id": "note-1", "content_type": "text/markdown",
-                                   "state": "committed", "content": "hello"})
+                                   "state": "live", "content": "hello"})
     assert m._offers(reader) is first, (
         "an unrelated write discarded the offers — the stamp is wider than the derivation")

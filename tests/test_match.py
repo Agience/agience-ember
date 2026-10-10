@@ -35,7 +35,7 @@ def wn_ready():
 def store(wn_ready):
     s = _FakeStore()
     for oid, offer in PANEL:
-        s.artifacts.put_artifact({"id": oid, "content_type": OT, "state": "committed",
+        s.artifacts.put_artifact({"id": oid, "content_type": OT, "state": "live",
                                   "context": offer})
     match.invalidate(s)
     return s

@@ -113,8 +113,8 @@ plumbing exerciser and is not a retrieval path.
 
 ## The instrument
 
-`ember/optics.py` is the one module here that imports `entroptics`, enforced by an AST test
-(`tests/test_one_instrument.py`). It pins `ENTROPTICS_REQUIRED = "0.2"` and matches major.minor
+`ember/optics.py` is the one module here that imports the instrument package, enforced by an AST
+test (`tests/test_one_instrument.py`). It pins `INSTRUMENT_REQUIRED = "0.2"` and matches major.minor
 exactly with patch floating, so a version skew fails at import rather than inside a reading.
 
 The dependency is the `[optics]` extra: a node that **carries** frames installs the base, a node that
@@ -122,7 +122,7 @@ The dependency is the `[optics]` extra: a node that **carries** frames installs 
 point of measurement.
 
 Importing `ember` registers the instrument as the process-default through a factory, so `import
-ember` loads numpy and entroptics only at the first measurement. The registration is process-global,
+ember` loads numpy and the instrument only at the first measurement. The registration is process-global,
 which is why an `import ember` line elsewhere is a host declaration and carries `# noqa: F401` with a
 header saying so.
 
@@ -142,7 +142,7 @@ Windows and `$XDG_CACHE_HOME/agience-ember` elsewhere.
 | [`runtime/engine.py`](src/ember/runtime/engine.py) | the reasoning half; the answerer is injected |
 | [`runtime/seams.py`](src/ember/runtime/seams.py) | the host seam table, bound at package scope so any process holding ember is a host |
 | [`config.py`](src/ember/config.py) | env-driven settings |
-| [`optics.py`](src/ember/optics.py) | the instrument — the one module importing `entroptics` |
+| [`optics.py`](src/ember/optics.py) | the instrument — the one module importing its package |
 | [`genesis.py`](src/ember/genesis.py) | the operator corpus and the provenance rungs |
 | [`ontology/`](src/ember/ontology/) | `activation` (spreading activation over the taxonomy), `match` (the propagation kernel and its measured constants), `information`, `corpus_stats` |
 | [`signal/`](src/ember/signal/) | `projection` · `forgetting` · `pooling` · `signal` · `state` |
@@ -167,7 +167,7 @@ Dual-licensed — see [`LICENSE`](LICENSE), [`COMMERCIAL_LICENSE.md`](COMMERCIAL
 
 ## Declaration of generative AI use
 
-The author used Anthropic's Claude Opus (versions 4.8 and 5) in the preparation of this work. Its
+The author used Anthropic's Claude Opus (versions 4.8, 5, and 5.5) in the preparation of this work. Its
 contribution was to write code, and to generate and validate content. The ideas, the construction
 and the claims are the author's. No other generative AI tool was used. The author reviewed and
 edited all output and takes full responsibility for the content of this publication.

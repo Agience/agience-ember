@@ -14,7 +14,7 @@ export PYTHONIOENCODING=utf-8 HF_HUB_DISABLE_PROGRESS_BARS=1
 export EMBER_CACHE_DIR="${EMBER_CACHE_DIR:-$HOME/.cache/agience/ember}"
 # mantle's outer src: it is imported as a package (`mantle.db.…`), so its modules import each
 # other package-qualified and the inner `src/mantle` path only half-loads.
-export PYTHONPATH="agience-ember/src;agience-mantle/src;entroptics/src"
+export PYTHONPATH="agience-ember/src;agience-mantle/src"
 
 echo "== 1. unit tests (distill, arithmetic+category, reason) =="
 python -m pytest agience-ember/src/ember/test_engine_distill.py \

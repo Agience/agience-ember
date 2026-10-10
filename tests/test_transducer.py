@@ -38,7 +38,7 @@ try:
     from ember.ontology import match as M
     store = open_sqlite_store(); arts = store.artifacts
     def syn(name, lemmas, counts, pos="n"):
-        return {"id": "wn-"+name, "content_type": "text/x-wordnet", "state": "committed", "pos": pos,
+        return {"id": "wn-"+name, "content_type": "text/x-wordnet", "state": "live", "pos": pos,
                 "lemmas": [l.lower() for l in lemmas], "lemma_counts": counts,
                 "sense_ranks": {l: 0 for l in lemmas}, "word": lemmas[0].lower(),
                 "content": name+" g", "gloss": name+" g", "provenance": "observed",

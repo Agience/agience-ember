@@ -101,7 +101,7 @@ class Delegate:
         self.screen = forgetting.Screen(witness=self.id, capacity=capacity, store=store)
 
         # ── the accumulating screen — the beam this delegate has seen, pooled ────────────────
-        # entroptics is a streaming instrument, so a read certifies as samples accumulate. A single
+        # The instrument is a streaming instrument, so a read certifies as samples accumulate. A single
         # turn is ~34 rows against a 195-dim basis, where the certified band `sqrt(F/T) + F/T` is
         # ~16 and the interval spans the whole range. Measured on the live corpus:
         #
@@ -158,7 +158,7 @@ class Delegate:
 
         `None` only when nothing has ever been placed; an all-dropped screen reports itself. See
         `ember.signal.pooling.PooledScreen.accumulated` for the shape and for why the read is asked
-        of `ember.optics`, the one module that reaches entroptics ([[one-instrument-enforced]])."""
+        of `ember.optics`, the one module that reaches the instrument ([[one-instrument-enforced]])."""
         return self._screen.accumulated()
 
     # ── subjective time ──────────────────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ class Delegate:
             doc.update({
                 "id": self.screen_artifact_id,
                 "content_type": SCREEN_TYPE,
-                "state": "committed",
+                "state": "live",
                 "tick": self.tick,
                 "delegate": self.id,
                 "origin": self.origin,

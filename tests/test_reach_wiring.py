@@ -51,7 +51,7 @@ class _FakeArtifacts:
         rows = [g for g in self._grants if state is None or g.get("state") == state]
         # Head-only by default, as `mantle.db.vertex.list_artifacts` is — an explicit
         # `state` has already decided the set, so `include_archived` governs only the unfiltered
-        # read, and a grant with no `state` is committed-by-absence and stays. The light-cone's
+        # read, and a grant with no `state` is live-by-absence and stays. The light-cone's
         # grant scan (`lattice_api._grant_docs_by`) asks with `include_archived=True` because it
         # filters lifecycle itself; a fake that hid archived grants from it would answer the
         # narrower question and let a revoked grant read as absent rather than as revoked.

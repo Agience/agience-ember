@@ -67,15 +67,15 @@ def _world(tmp_path):
     artifact, and the corpus holds no edge to it. A co-activation dump would name it."""
     L = _lattice(tmp_path)
     L.artifacts.put_many([
-        {"id": "wn-wolf.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-wolf.n.01", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["wolf"], "hypernyms": ["canine.n.02"], "ic": 9.0,
          "content": "any of various predatory carnivorous canine mammals",
          "cited_from": "cite.wordnet"},
-        {"id": "wn-canine.n.02", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-canine.n.02", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["canine"], "hypernyms": [], "ic": 5.0,
          "content": "any of various fissiped mammals with nonretractile claws",
          "cited_from": "cite.wordnet"},
-        {"id": "wn-department_of_energy.n.01", "content_type": WN, "state": "committed", "pos": "n",
+        {"id": "wn-department_of_energy.n.01", "content_type": WN, "state": "live", "pos": "n",
          "lemmas": ["department_of_energy"], "hypernyms": [], "ic": 5.0,
          "content": "the federal department responsible for maintaining a national energy policy",
          "cited_from": "cite.wordnet"},

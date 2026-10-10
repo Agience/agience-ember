@@ -91,7 +91,7 @@ def _basis_from_cloud(M):
     irreversibly.
 
     On the instrument path the matrix is the point estimate, and stays that width.
-    `ember.optics.principal_directions` returns exactly `resolved_modes` columns (entroptics computes
+    `ember.optics.principal_directions` returns exactly `resolved_modes` columns (the instrument computes
     the count and slices `evecs[:, order[:k]]` in one call), so that is the widest matrix reachable
     through the one sanctioned instrument. Widening it would take either a second eigendecomposition
     here — a private re-implementation of the instrument, which `ember/optics.py` exists to prevent
@@ -219,7 +219,7 @@ def _write_generation(store, body: Dict[str, Any], *, author: str):
 
     `(_origin, _seq)` orders the lineage newest-first rather than oldest-first as `versions_of`
     describes: `revise` writes the new version before archiving the old — deliberately, so a crash
-    between the two leaves two committed heads rather than zero — so the archived prior is re-stamped
+    between the two leaves two live heads rather than zero — so the archived prior is re-stamped
     with the later `_seq`. That is mantle's to reconcile; `superseded_by` is the link that says which
     came after which.
 
@@ -255,7 +255,7 @@ def _write_generation(store, body: Dict[str, Any], *, author: str):
     if head is None:
         from prism.grounding import _now
         doc = dict(body)
-        doc.update({"id": BASIS_ROOT, "state": "committed", "created_by": author,
+        doc.update({"id": BASIS_ROOT, "state": "live", "created_by": author,
                     "created_time": _now()})
         return arts.put_artifact(doc)
     return revise(head["id"], dict(body), author=author)

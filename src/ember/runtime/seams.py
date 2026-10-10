@@ -48,8 +48,8 @@ HOST_SEAMS: Dict[str, str] = {
     # needs somewhere to accumulate; that the decay is measured rather than a typed window length is
     # exactly why it is ember's measurement and not the declarer's own dictionary.
     "forgetting": "ember.signal.forgetting",
-    # the instrument itself. `test_only_the_instrument_seam_imports_entroptics` pins ember/optics.py as the
-    # one module that may reach entroptics; a declarer that needs a read therefore needs a seam, or
+    # the instrument itself. `test_only_the_seam_imports_the_instrument` pins ember/optics.py as the
+    # one module that may reach the instrument; a declarer that needs a read therefore needs a seam, or
     # it reaches past the wrapper — and the wrapper is what keeps the entropy fold guard from
     # destroying a sparse carrier. Reads are added to optics.py rather than worked around here.
     "optics": "ember.optics",

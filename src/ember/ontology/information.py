@@ -2,7 +2,7 @@
 
 The one definition, shared by `activation.seeds_from_text` and `match.fired_field`. Bits because
 that is the unit the rest of the instrument reports information in: the expectation of this
-quantity is the Shannon entropy `entroptics.entropy` computes, so a surprisal in bits composes with
+quantity is the Shannon entropy the instrument's `entropy` computes, so a surprisal in bits composes with
 the entropy reads.
 
 ## What it is
@@ -66,8 +66,8 @@ def word_information(store) -> Optional[Callable[[str], Optional[float]]]:
     except Exception:
         return None                      # no index to measure against — the caller keeps its prior
 
-    # Imported here rather than at module scope: `ember.optics` is the single sanctioned entroptics
-    # door, and importing it eagerly would pull entroptics into every process that merely imports
+    # Imported here rather than at module scope: `ember.optics` is the single sanctioned the instrument
+    # door, and importing it eagerly would pull the instrument into every process that merely imports
     # the ontology. `ember/tests/test_ember_holds_the_instrument.py` asserts that laziness.
     from ember.optics import self_information_bits
 

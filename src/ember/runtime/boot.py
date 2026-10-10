@@ -150,7 +150,7 @@ class Ember:
         secret = _region.principal_secret(s.cache_dir)          # create=False: never auto-mint
         # The read-time head resolver. There is no stored head: every revision commits and stands,
         # and which one answers is measured when a query is made, against the reader's own recall
-        # set. `ember/optics.py` is the one module that reaches entroptics, so the measurement
+        # set. `ember/optics.py` is the one module that reaches the instrument, so the measurement
         # arrives here as an injection rather than being taken inside mantle.
         #
         # Too little frame, an unmeasurable candidate, or no candidate above the frame's own null
@@ -373,7 +373,7 @@ def _wire_collection_proximity(store) -> None:
     """Install the proximity digest refresher into the store. Idempotent; safe every boot.
 
     mantle declares the seam and cannot fill it: `CollectionDigestRefresher` needs an instrument
-    to take the spectral read with, and mantle never imports entroptics. ember is the sole
+    to take the spectral read with, and mantle never imports the instrument. ember is the sole
     sanctioned door to it (`ember.optics`), so the host supplies `read` and `engine_id` here and
     the store reports membership changes without knowing what reads them.
 

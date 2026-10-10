@@ -1,11 +1,11 @@
-"""The single seam onto entroptics. Every read in this codebase goes through here.
+"""The single seam onto the instrument. Every read in this codebase goes through here.
 
 Why the instrument is a wrapper
 -----------------------------
-Three defects arise at a call site that reaches for entroptics directly, and each of them is
+Three defects arise at a call site that reaches for the instrument directly, and each of them is
 silent:
 
-1. **Wrong door.** `entroptics.read()` / `Screen(W)` bypass the streaming front door and apply the
+1. **Wrong door.** The instrument's `read()` / `Screen(W)` bypass the streaming front door and apply the
    entropy fold guard (`screen.py:619`, `fold = H_F < log2F - band_F`), which the library itself
    documents as the guard that destroys a sparse carrier (`batch.py:293`: *"Unlike the entropy
    (H_F) guard, this does NOT fold a sparse carrier (which averaging would dilute)"*). Ontology
@@ -55,7 +55,7 @@ corpus. ember's four signal modules (`signal/projection`, `signal/pooling`, `sig
 `crystal -> ember` are both 0 in non-test `src/`, ratcheted.
 
 `ember/__init__.py` registers this module as the process-default instrument through
-`prism.instrument.set_default`, passing a factory so that `import ember` does not pull entroptics
+`prism.instrument.set_default`, passing a factory so that `import ember` does not pull the instrument
 and numpy into a process that only wanted the cache. A measurement site resolves its instrument in
 that order: an explicit keyword argument, then the process default, then no reading.
 """
@@ -76,106 +76,28 @@ from prism.rounding import split_walk_rounding
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Binding the entroptics that the measurements were verified against
+# The instrument's version
 # ═══════════════════════════════════════════════════════════════════════════════
-# entroptics is the source of every measured value here, so *which* entroptics is a correctness
-# question rather than a packaging convenience. Two things can win the import: a `pip install
-# entroptics` wheel in `site-packages`, or a second source checkout elsewhere on the box. In either
-# case an edit made in the tree you are reading changes nothing while appearing to.
-#
-# What is checked is identity, and location is only one signal of it. A pure location test rejects
-# every correct off-workspace install — ember on a container, a CI runner or an edge node resolves
-# entroptics from site-packages by construction — so two direct signals carry the check:
-#
-#   1. **The version**, pinned here to a major.minor. Catches an install that moved underneath us.
-#   2. **The numbers**, pinned in `prism.vectors/screen_read_vectors.json`. entroptics 0.2.0
-#      shipped three value changes behind an unchanged API, so a matching version is necessary and
-#      not sufficient — the vectors are what close it.
-#
-# The rival-source-checkout check below is derived (computed from this file's own location, so
-# moving the workspace preserves it) and self-disables when the intended tree is absent — which is
-# exactly the off-workspace install it must let through.
-#
-# The intended tree is `entroptics`, a MEMBER of this workspace since the three workspaces merged
-# into `Repos/agience/` (2026-08-23). `agience-entroptics` is the older copy and is named below as
-# a rival: it is still a source checkout, still imports, and still reports 0.2.0, so nothing but
-# this check tells them apart. They are not the same code — measured, they differ by 948 lines in
-# `proximity.py` and 257 in `instrument.py` — which is exactly why a version cannot arbitrate between
-# them and why the vectors are the second half of this binding.
-#
-# The guard self-disables when the intended tree is absent, so a wheel passes — and that makes the
-# repo name here load-bearing in a way no test failure announces. A stale name leaves
-# `os.path.isdir(want)` False on every box, so the guard takes its off-workspace-install branch and
-# admits any checkout, which is the one thing it exists to refuse. `ci_runner`'s PYTHONPATH carries
-# the same name, so if the entroptics repo is renamed both move together.
-#
-# This seam is the only import site (the AST test in `tests/test_one_instrument.py` enforces that), so
-# verifying the binding once here covers the whole codebase.
-ENTROPTICS_REQUIRED = "0.2"      # major.minor; matched exactly, patch releases float
-
-# Where the names live, because a patch release moved them and the next edit will want to move them
-# back. 0.2.1 narrowed the top-level re-exports: `concentration`, `decay`, `etendue`,
-# `mercer_certificate`, `phi_F`, `phi_T`, `principal_directions`, `scale_profile`,
-# `space_bandwidth` and `strehl` are imported below from `entroptics.reads`, which is where they are
-# DEFINED — `entroptics.instrument` also re-exports them, so importing from there would work and would
-# be one more indirection to keep in step. `sequence` is a submodule and is imported as one.
-#
-# Nothing was removed in that release and no measured value moved: all seven cases in
-# `screen_read_vectors.json` reproduce exactly, on both engines. The change surfaced as ImportErrors
-# at collection — the loudest failure available — which is the two-check design working. The version
-# alone would not have caught it, because "patch releases float" is a statement about what a patch
-# release is SUPPOSED to carry, and this one carried a surface change.
+# The instrument is the installed package. Its major.minor is pinned here, and its numbers in
+# `prism.vectors/screen_read_vectors.json`, because a release can move values behind an unchanged
+# version. This file is the only import site (`tests/test_one_instrument.py`).
+INSTRUMENT_REQUIRED = "0.2"      # major.minor; matched exactly, patch releases float
 
 
-def _bind_local_entroptics() -> str:
-    import entroptics                                     # the one eager import; this file IS the seam
-    src = os.path.abspath(entroptics.__file__).replace("\\", "/")
-    low = src.lower()
-
-    have = getattr(entroptics, "__version__", "")
-    if ".".join(have.split(".")[:2]) != ENTROPTICS_REQUIRED:
+def _bind_instrument() -> str:
+    import entroptics as _instrument                      # the one eager import; this file IS the seam
+    src = os.path.abspath(_instrument.__file__).replace("\\", "/")
+    have = getattr(_instrument, "__version__", "")
+    if ".".join(have.split(".")[:2]) != INSTRUMENT_REQUIRED:
         raise ImportError(
-            "entroptics %s is installed; the instrument's measurements are pinned to %s.x.\n    %s\n"
-            "Every number the instrument reports comes from this library, and 0.2.0 shipped value changes "
-            "that carried no API change — so the version is the coarse check and "
-            "`prism.vectors/screen_read_vectors.json` is the fine one. Install the matching version, or "
-            "move the pin and the vectors together in one commit."
-            % (have or "(no __version__)", ENTROPTICS_REQUIRED, src))
-
-    # …/agience-ember/src/ember/optics.py -> the workspace is three hops up, and the entroptics
-    # checkout is a MEMBER of it (it was a sibling one further out until the workspaces merged into
-    # `Repos/agience/`). Derived by construction rather than written as a
-    # literal, so moving the pair together preserves the check. The hop count is why the instrument
-    # sits at `ember/optics.py` and not a directory deeper: from `ember/signal/optics.py` the same
-    # expression resolves a level too high, `os.path.isdir` is False for every candidate, and this
-    # guard switches itself off instead of failing. Count the hops before moving this file.
-    _workspace = os.path.join(os.path.dirname(__file__), "..", "..", "..")
-
-    def _root(*parts):
-        return os.path.abspath(os.path.join(*parts)).replace("\\", "/").lower().rstrip("/") + "/"
-
-    want = _root(_workspace, "entroptics", "src")
-    stale = _root(_workspace, "agience-entroptics", "src")
-
-    # Enforced only against a tree that is actually on disk. An off-workspace install — a wheel, a
-    # CI container — matches neither and must pass; the version check above is what covers it there.
-    if os.path.isdir(want) and not low.startswith(want):
-        raise ImportError(
-            "entroptics resolved to a DIFFERENT source checkout:\n    %s\nthe instrument must bind "
-            "the current tree:\n    %s\n%sA rival checkout is still a source checkout, so this is "
-            "not a packaging nit: every measured value here comes from whichever tree wins the "
-            "import, and edits to the other one change nothing while appearing to. Re-point the "
-            "editable install (`pip uninstall entroptics && pip install -e <workspace>/entroptics`)."
-            % (src, want,
-               ("That path is `agience-entroptics`, the older copy: same version, different code.\n"
-                if low.startswith(stale) else "")))
+            "the instrument %s is installed; its measurements are pinned to %s.x.\n    %s\n"
+            "Install the matching version, or move the pin and `prism.vectors/screen_read_vectors.json` "
+            "together." % (have or "(no __version__)", INSTRUMENT_REQUIRED, src))
     return src
 
 
-# The resolved source path, verified at import. Runs once when the seam is first imported (which is
-# whenever any measurement is taken), and is exposed so a caller / health check can see exactly which
-# entroptics tree the instrument is reading through.
-ENTROPTICS_SOURCE = _bind_local_entroptics()
+#: Where the instrument was loaded from, for a health check.
+INSTRUMENT_SOURCE = _bind_instrument()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -194,7 +116,7 @@ ENTROPTICS_SOURCE = _bind_local_entroptics()
 # f_eff=1, reported as K_signal=1) — a caller who wants the membrane names it, and a caller who
 # wants a measurement cannot arrive here by autocomplete. It lives in this file rather than an
 # `ember/membrane.py` because the one-instrument rule (`tests/test_one_instrument.py`, `_ALLOWED =
-# {"optics.py"}`) allows exactly one module to import entroptics.
+# {"optics.py"}`) allows exactly one module to import the instrument package.
 def membrane_screen():
     """The folded `Screen` class — the membrane's object model, distinct from the measurement
     instrument.
@@ -219,7 +141,7 @@ def membrane_types():
                            Losslessness=Losslessness, Coupling=Coupling)
 
 __all__ = ["OpticsRead", "read_ordered", "UnorderedInput", "DegenerateFrame",
-           "ENTROPTICS_SOURCE", "principal_directions", "absorb_transmit", "propagate_residual",
+           "INSTRUMENT_SOURCE", "principal_directions", "absorb_transmit", "propagate_residual",
            "route_by_coupling", "next_by_coupling",
            "resolvable", "correlation_length", "diffraction", "coherence",
            "spots", "fill", "scales", "correlated_null", "derived_null",
@@ -231,7 +153,7 @@ __all__ = ["OpticsRead", "read_ordered", "UnorderedInput", "DegenerateFrame",
            # how cosine similarity gets written, and cosine is out of scope in the reasoning domain.
            "screen_normalize",
            "scale_read", "certificate", "entropy_bits", "self_information_bits",
-           # Proximity — the collection digest and its probe. The one entroptics surface mantle is
+           # Proximity — the collection digest and its probe. The one the instrument surface mantle is
            # built to consume through injected seams and cannot import for itself.
            "proximity_read", "proximity_engine_id", "proximity_probe_factory", "spectral_distance",
            # The streaming surface — the screen accumulates; condensation is an event
@@ -246,7 +168,7 @@ __all__ = ["OpticsRead", "read_ordered", "UnorderedInput", "DegenerateFrame",
 # Degeneracy is computed from the frame, not compared against an integer
 # ═══════════════════════════════════════════════════════════════════════════════
 # `OpticsRead.coherence` is a z against the exact row-permutation null
-# (`entroptics.projection.coherence`), and its variance is the Cliff-Ord / Mantel second moment —
+# (the instrument's `projection.coherence`), and its variance is the Cliff-Ord / Mantel second moment —
 # an expectation over ordered pairs of lag-pairs. Its highest-order term is the disjoint one,
 #
 #     E_disj = (S1² - 4U + 2S2) / (N(N-1)(N-2)(N-3)),
@@ -329,7 +251,7 @@ MIN_ROWS = _smallest_readable_rows()          # == 4, computed, not written down
 # The false-alarm level lives in the null
 # ═══════════════════════════════════════════════════════════════════════════════
 # A read here takes two external inputs: the local resource envelope and the caller's noise
-# provider. A false-alarm level is a property of the null rather than a third input, and entroptics
+# provider. A false-alarm level is a property of the null rather than a third input, and the instrument
 # is explicit that it is (`null_providers.py`, its own header):
 #
 #     "The false-alarm level (alpha, `far`) travels WITH the null, not beside it: the cutoff is ONE
@@ -341,7 +263,7 @@ MIN_ROWS = _smallest_readable_rows()          # == 4, computed, not written down
 # ignores the `far` a caller passes to the read, so `read_ordered(rows, null=permutation(far=0.01),
 # far=0.05)` would report a 0.05 that no cutoff was ever drawn at.
 #
-# `null=None` runs the read on entroptics' own derived default provider at its own level — the
+# `null=None` runs the read on the instrument's own derived default provider at its own level — the
 # library's number, in the library, where the derivation that produced it lives. A caller with an
 # opinion states it inside a null: `correlated_null(far=...)` (sampled, distribution-free) or
 # `derived_null(far=...)` (closed-form, analytically sharp). One decision, one place, and the level
@@ -393,7 +315,7 @@ class OpticsRead:
         exist (`k_signal == 0`, or every mode resolved).
     k_lo, k_hi, k_band
         The Weyl-certified interval for `k_signal` from
-        `entroptics.reads.resolved_dimension_interval`: with `|C_read - C_true|_2 <= band`,
+        the instrument's `reads.resolved_dimension_interval`: with `|C_read - C_true|_2 <= band`,
         `k_lo` counts modes certainly above the floor and `k_hi` modes possibly above it, so
         the true count lies in `[k_lo, k_hi]`. `k_band` is the a-priori spectral-norm band
         from `concentration_band(n_rows, n_features)`. `k_certain` (`k_lo == k_hi ==
@@ -419,7 +341,7 @@ class OpticsRead:
         not computable on this side of the library, so it is not supplied. There is no
         per-mode p-value on the spectral read: `SpectralOptics` exposes `eigenvalues`,
         `noise_floor`, `contrast`, `top_share` and friends, and nothing probabilistic per
-        mode. entroptics' per-mode p-values live in `projection.mode_significance`, reached
+        mode. The instrument's per-mode p-values live in `projection.mode_significance`, reached
         via `Aperture.significance` -> `self.projection().significance` — i.e. behind the
         entropy-folded Projection, the door this module routes around. Sourcing a p-value
         there takes it off a basis measured to fold 256 feature channels to f_eff=1 and
@@ -582,13 +504,13 @@ def _as_ordered_matrix(rows) -> np.ndarray:
     order twice, and an ordering that cannot be reproduced cannot be reasoned about.
 
     Precision follows the frame (`_own_precision`), so a complex frame keeps its phase all the way
-    to the instrument. entroptics is complex-native underneath — the correlation is Hermitian
+    to the instrument. The instrument is complex-native underneath — the correlation is Hermitian
     (`Xc.conj().T @ Xc`), `Aperture` reads a complex frame and publishes a `phase` for it, and
     `Dynamics` promotes real->complex on contact.
     """
     if isinstance(rows, _UNORDERED):
         raise UnorderedInput(
-            f"{type(rows).__name__} has no row order. The entroptics screen is ORDERED: axis 0 "
+            f"{type(rows).__name__} has no row order. The instrument's screen is ORDERED: axis 0 "
             "is the ordered axis, and an arbitrary order collapses coherence toward the null "
             "(measured 11.32 -> 0.42 under shuffle). Sort or sequence the "
             "rows deliberately and pass a list/tuple/ndarray."
@@ -640,12 +562,12 @@ def _unscreened(W: np.ndarray) -> OpticsRead:
 
 def read_ordered(rows, *, null=None, seed: int = 0,
                  window: Optional[int] = None, with_screen: bool = True) -> OpticsRead:
-    """Screen an ordered frame through the instrument — the sanctioned entroptics read.
+    """Screen an ordered frame through the instrument — the sanctioned the instrument read.
 
     `rows` is (T, F): axis 0 ordered, axis 1 feature. Pass an ndarray or a Sequence of
     equal-length vectors, in the order you mean. A `set` raises `UnorderedInput`.
 
-    `null` is the noise provider, the caller's one say in this read. `None` runs on entroptics'
+    `null` is the noise provider, the caller's one say in this read. `None` runs on the instrument's
     derived `mp` default, the i.i.d.-Gaussian edge: correct for an i.i.d. bulk and optimistic for
     correlated rows. For retrieved evidence (correlated by construction) pass `correlated_null()`,
     the distribution-free permutation null the library directs correlated callers to. Deterministic
@@ -655,7 +577,7 @@ def read_ordered(rows, *, null=None, seed: int = 0,
     block near the head of this module. State a level by handing over a null that holds it:
     `correlated_null(far=…)` or `derived_null(far=…)`.
 
-    `window` defaults to None, which reads the whole frame. entroptics' `Aperture` defaults to an
+    `window` defaults to None, which reads the whole frame. The instrument's `Aperture` defaults to an
     adaptive 128-frame window, truncating a longer batch read; a one-shot screen over a fixed
     evidence set wants the whole of it.
 
@@ -836,7 +758,7 @@ def resolvable(rows, *, null=None, seed: int = 0, require_certain: bool = False)
 def position_coherence(rows, position: int, *, lag: int = 1) -> Optional[float]:
     """The per-position read: how well does one row sit where it sits, against its frame's own null?
 
-    entroptics' own decomposition, read at a position instead of over a frame.
+    The instrument's own decomposition, read at a position instead of over a frame.
     `projection.coherence` is `A = mean_i R[i, i+lag]` standardised against `mu`, the off-diagonal
     mean of `R = Re(G)**2`. This takes the same `R` and the same `mu`, and reads the terms belonging
     to `position` — `R[p-lag, p]` and `R[p, p+lag]`. It is not a new statistic: the frame-level mean
@@ -883,7 +805,7 @@ def position_coherence(rows, position: int, *, lag: int = 1) -> Optional[float]:
     if n < 4:
         return None            # the closed-form moment needs four distinct indices
 
-    # The exact permutation moment, assembled as `entroptics.projection.coherence` assembles it
+    # The exact permutation moment, assembled as the instrument's `projection.coherence` assembles it
     # (Cliff-Ord / Mantel, Theorem 5.2) and evaluated for this statistic's term count.
     #
     # The sharing term carries the weight here: `R[p-lag,p]` and `R[p,p+lag]` share row p, which is
@@ -1069,7 +991,7 @@ def absorb_transmit(rows, *, basis=None, null=None, seed: int = 0):
     The absorbed band is unsigned. Provenance is signed at the tekton boundary, on the typed artifact the
     tekton condenses the band into — the waveform-provenance boundary keeps signatures off mid-stream
     frames. This returns the physical split; signing is the tekton's, after condensation. The read stays
-    inside the one instrument (`principal_directions`), so entroptics is reached only through
+    inside the one instrument (`principal_directions`), so the instrument is reached only through
     `ember.optics`."""
     W = _as_ordered_matrix(rows)
     if basis is None:
@@ -1379,7 +1301,7 @@ def scales(rows, windows=None) -> Optional[list]:
     `dominant_window` is the entry of maximal `coherence`.
 
     The member names `k_signal`, `coherence`, `noise_floor` and `mp_edge` directly, because
-    `entroptics.reads.ScaleProfile` carries no `rows` / `profile` / `scales` / `points`, and every
+    the instrument's `reads.ScaleProfile` carries no `rows` / `profile` / `scales` / `points`, and every
     per-window quantity on it is a numpy array — a dict comprehension filtered on
     `isinstance(..., (int, float))` drops all of them and leaves a single dict of the two scalars.
     The profile is the point of the read (a
@@ -1426,7 +1348,7 @@ def correlated_null(*, draws: Optional[int] = None, far: Optional[float] = None)
     `draws` is compute rather than a modelling choice. A sampled null is empirical, so the draw
     count fixes the finest p it can resolve (`1/draws`) and costs CPU linearly, which makes it a
     question for the instrument's resource envelope. `None` leaves it at
-    `entroptics.null_providers.permutation`'s own default, stated in the one place it is written
+    the instrument's `null_providers.permutation` own default, stated in the one place it is written
     down.
 
     The envelope cannot answer it yet: `prism.envelope` measures memory (cgroup / job object /
@@ -1445,7 +1367,7 @@ def derived_null(*, far: float):
     """The library's own derived edge (`mp`, finite-size Johnstone / Tracy-Widom), pinned to a
     stated false-alarm level — the closed-form counterpart of `correlated_null`.
 
-    This is where a level goes. It is a property of the null, in entroptics' own words
+    This is where a level goes. It is a property of the null, in the instrument's own words
     (`null_providers`: *"The false-alarm level (alpha, `far`) travels WITH the null, not beside it:
     the cutoff is ONE decision, so the provider owns both the threshold and the alpha it is drawn
     at"*). A caller with an opinion about how often it will call noise a coupling states it by
@@ -1471,17 +1393,17 @@ def derived_null(*, far: float):
 def entropy_bits(weights) -> float:
     """Shannon entropy in bits of a non-negative weight array — `H(w) = -sum p log2 p`, `p = w/sum w`.
 
-    The one entropy definition entroptics uses (geometry marginals, mode weights, spectra). Normalises
+    The one entropy definition the instrument uses (geometry marginals, mode weights, spectra). Normalises
     internally. A single weight or an all-zero array is 0.0; a flat array of n weights is log2(n).
 
     An adapter, not an implementation: the four lines below are `numpy.asarray`, a finite-and-positive
-    mask, and a call to `entroptics.entropy.shannon_bits`. Its floor is numpy + entroptics, identical
+    mask, and a call to the instrument's `entropy.shannon_bits`. Its floor is numpy + the instrument, identical
     to the rest of this module, which is why it lives at the instrument.
 
     A stdlib home in prism would add a copy rather than remove an import. prism does not import
-    entroptics (the publication boundary — `test_contract_install_is_pure.py::PRIVATE`), so a
+    the instrument (the publication boundary — `test_contract_install_is_pure.py::PRIVATE`), so a
     `prism.entropy_bits` would re-implement the arithmetic, and the property that makes this function
-    worth having is that a caller's entropy and entroptics' own entropy over geometry marginals and
+    worth having is that a caller's entropy and the instrument's own entropy over geometry marginals and
     mode weights are the same callable.
 
     `mantle/search/beacon/engine.py::shannon_bits` is the other embodiment's copy, and the two
@@ -1514,7 +1436,7 @@ def joint_entropies(rows_x, rows_y, mask_x=None, mask_y=None) -> dict:
     into noise, so a truncated read would report the misalignment as a measurement. The read is
     directed: `H_X_given_Y` and `H_Y_given_X` differ, and both come back named.
 
-    An adapter, exactly as `entropy_bits` is: the arithmetic lives in `entroptics.entropy`, so a
+    An adapter, exactly as `entropy_bits` is: the arithmetic lives in the instrument's `entropy`, so a
     caller's joint read and the instrument's own are the same callable."""
     from entroptics.entropy import joint_entropies as _joint
     return dict(_joint(_as_ordered_matrix(rows_x), _as_ordered_matrix(rows_y), mask_x, mask_y))
@@ -1523,7 +1445,7 @@ def joint_entropies(rows_x, rows_y, mask_x=None, mask_y=None) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 # The streaming surface — the screen accumulates, and condensation is an event
 # ═══════════════════════════════════════════════════════════════════════════════
-# Everything above this line is a batch function: construct, read, discard. entroptics is also a
+# Everything above this line is a batch function: construct, read, discard. The instrument is also a
 # stateful streaming instrument, and the surface below is its front door. `Aperture.update(frame)`
 # accumulates, streams the dynamical operator from frame 0, and forgets adaptively — its own words:
 # *"keep >= window frames, and MORE while a coherent signal is still active; forget only the
@@ -1562,7 +1484,7 @@ def accumulated_read(acc) -> Optional[dict]:
     reading rather than a verdict.
 
     The read lives here, at the one instrument, and callers call it. A second entry point into
-    `entroptics.reads` is a second place that can read a different instrument than everyone else:
+    the instrument's `reads` is a second place that can read a different instrument than everyone else:
     `read()`/`Screen()` apply the entropy fold guard that destroys a sparse carrier (measured: 256
     channels -> F_eff = 1, reported as K_signal = 1)."""
     if acc is None:
@@ -1613,7 +1535,7 @@ def beam(rows, *, null=None, seed: int = 0):
     per ordered step), `basis` (the directions it spans), `profile` (amplitude along each), and
     `modes`, which decompose the same way at every depth.
 
-    `etendue = phi_T * phi_F` is, in entroptics' own words, *"the phase space this beam occupies,
+    `etendue = phi_T * phi_F` is, in the instrument's own words, *"the phase space this beam occupies,
     and THE CONSERVED INVARIANT A CROSSING IS SETTLED BY"*. That makes conservation of information a
     measurable quantity: a crossing that changes it has created or destroyed something, and the beam
     can be asked whether it did.
@@ -1631,7 +1553,7 @@ def self_information_bits(observed: float, total: float) -> Optional[float]:
     """`I(x) = -log2(p)` — how much observing x narrows the field, in bits.
 
     The summand of the entropy `entropy_bits` sums: `H = Σ p·I(x)`. Both come from
-    `entroptics.entropy` — same base, same clip, same module — so the two stay one definition of
+    the instrument's `entropy` — same base, same clip, same module — so the two stay one definition of
     "information in bits".
 
     A thing seen in nearly every observation carries almost nothing: `p→1` gives `I→0`. A thing seen
@@ -1643,7 +1565,7 @@ def self_information_bits(observed: float, total: float) -> Optional[float]:
     so an unmeasurable count carries `None` instead.
 
     A wrapper rather than an implementation: the arithmetic is
-    `entroptics.entropy.surprisal_bits`, beside `shannon_bits`, sharing its base and its clip. This
+    the instrument's `entropy.surprisal_bits`, beside `shannon_bits`, sharing its base and its clip. This
     delegates exactly as `entropy_bits` does."""
     from entroptics.entropy import surprisal_bits
     return surprisal_bits(observed, total)
@@ -1652,7 +1574,7 @@ def self_information_bits(observed: float, total: float) -> Optional[float]:
 def coherence(rows, *, seed: int = 0) -> Optional[float]:
     """Strehl — how much of the energy sits in the leading mode of the ordered axis.
 
-    Precisely (entroptics): `lambda_1 / sum(lambda)` of `axis_spectrum(W, 0)`, the correlation
+    Precisely (the instrument): `lambda_1 / sum(lambda)` of `axis_spectrum(W, 0)`, the correlation
     eigenspectrum taken with the T rows as the variables. The question it answers is "are the
     frame's rows all the same thing?" — 1.0 means every row is one coherent object, low means the
     rows do not agree.
@@ -1698,21 +1620,21 @@ def coherence(rows, *, seed: int = 0) -> Optional[float]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # The dynamics side — same door
 # ═══════════════════════════════════════════════════════════════════════════════
-# `entroptics.dynamics`, `delay_embed` and `null_providers` come through this seam like everything
+# The instrument's `dynamics`, `delay_embed` and `null_providers` come through this seam like everything
 # else: one import site, so a defect in how the instrument is used is fixed once.
 #
 # These wrappers are thin by design. Their job is to be the import site and to carry the measured
 # caveats, rather than to re-abstract a library that is already the right shape.
 
 def screen_normalize(rows, mask=None):
-    """Normalise a screen — the whole (T, F) frame — by entroptics' own MAD whitening.
+    """Normalise a screen — the whole (T, F) frame — by the instrument's own MAD whitening.
 
     Normalisation happens on the screen. Dividing an individual vector by its norm is the move that
     produces cosine similarity, which is out of scope in this domain, and it discards the magnitude
     the conservation certificate is stated over.
 
-    This is the published way to normalise a screen. `entroptics.entropy.normalize` is reachable
-    only from inside this module (`test_only_the_instrument_seam_imports_entroptics`), so a persona that
+    This is the published way to normalise a screen. The instrument's `entropy.normalize` is reachable
+    only from inside this module (`test_only_the_seam_imports_the_instrument`), so a persona that
     needs a whitened frame calls this rather than hand-rolling per-vector division.
 
     Whitening can amplify. Per-channel MAD whitening rescales a frame with heterogeneous channel
@@ -1806,7 +1728,7 @@ def surrogate_significance(seq, *, draws: int = 200, n_max: int = 8, seed: int =
 
     The shuffled control, read off the sequence itself rather than against a typed-in threshold —
     the measurement that separates "the reader learned the text" from "the reader learned the
-    alphabet's frequencies". Returns entroptics' dict, or `None` when the sequence carries no
+    alphabet's frequencies". Returns the instrument's dict, or `None` when the sequence carries no
     read."""
     import entroptics.sequence as _sequence
     try:
@@ -1829,7 +1751,7 @@ def embed(X, d: int):
 
 
 def fit_dynamics(X, *, forgetting: float = 1.0, rank=None):
-    """Fit the Koopman/DMD dynamics of an ordered trajectory. Returns the entroptics object.
+    """Fit the Koopman/DMD dynamics of an ordered trajectory. Returns the instrument object.
 
     Order is the whole signal here, more so than for a static read: a shuffled trajectory has no
     dynamics to fit, and the fit still returns an object, so the caller supplies the trajectory in
@@ -2030,12 +1952,12 @@ def error_bar(samples, read, *, n_bins: Optional[int] = None) -> Optional[dict]:
 # Proximity — the collection digest, and the probe over it
 # ═══════════════════════════════════════════════════════════════════════════════════════════════
 #
-# `entroptics.proximity` is a magnitude-carrying, width-free spectral digest of a frame. It is the
-# one entroptics surface mantle is BUILT to consume and cannot reach: `collection_frame`,
+# the instrument's `proximity` is a magnitude-carrying, width-free spectral digest of a frame. It is the
+# one the instrument surface mantle is BUILT to consume and cannot reach: `collection_frame`,
 # `digest_refresh` and `collection_proximity` all take `read` / `engine_id` / `probe_factory` as
 # injected seams, and every one of their docstrings names these functions as the intended filler.
-# Mantle never imports entroptics (the publication boundary), so a host supplies them — and the
-# host may only reach entroptics through this module (`tests/test_one_instrument.py`).
+# Mantle never imports the instrument (the publication boundary), so a host supplies them — and the
+# host may only reach the instrument through this module (`tests/test_one_instrument.py`).
 #
 # These are thin by design. Unlike the reads above they add no policy: proximity's own contract is
 # already "not a recall path, not a ranking, not a retrieval policy — a capability", so wrapping it

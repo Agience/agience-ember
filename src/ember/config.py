@@ -27,7 +27,7 @@ class Settings:
     # reason. A name here would route into a cell that corresponds to no artifact: it would
     # "work", produce plausible region ids, and share with nobody.
     collection_id: str
-    engine: str           # "extractive" (default) | "entroptics"
+    engine: str           # "extractive" (default) | "the instrument"
     # The local embedder's model_id. It names a vector space, not a class: the cross-walk is
     # fitted per space and anchor ids are content-addressed over it, so two potion models are
     # two spaces. Empty => HashEmbedder (plumbing only, not semantic).

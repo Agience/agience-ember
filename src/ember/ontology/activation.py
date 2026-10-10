@@ -255,6 +255,12 @@ def seeds_from_artifact(art: Dict[str, Any]) -> Dict[str, float]:
     if not seeds:
         for field in ("context", "content", "name", "description"):
             v = art.get(field)
+            if field == "context" and isinstance(v, str):
+                # The writer's keys, not the store's record of the write: a stored context carries
+                # the mint (a principal id, a timestamp, a content hash) beside them, and those are
+                # not what the artifact is about. The same reading the index takes (`_offer_text`).
+                from ember.corpus.ingest import _offer_text
+                v = _offer_text(v)
             if isinstance(v, str) and v.strip():
                 # The whole field is seeded: the bound on how much of an artifact is read is the
                 # artifact, which says what it says. A caller genuinely bounded by machine size

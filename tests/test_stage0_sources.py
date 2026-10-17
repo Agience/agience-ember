@@ -419,17 +419,6 @@ def _install_fake_nltk(monkeypatch):
 
 
 
-def test_ensure_ctype_never_rolls_back_an_evolved_describer():
-    """Describers evolve, so a re-running ingester leaves an existing describer in place and seeds
-    only where none is present."""
-    s = _store()
-    assert s0._ensure_ctype(s, "text/x-wordnet", author="u", **s0._WN_TYPE) is True
-    s.artifacts.put_artifact({**s.artifacts.get_artifact("type.text/x-wordnet"),
-                              "offer_template": "{title} ({pos}): {gloss}"})
-    assert s0._ensure_ctype(s, "text/x-wordnet", author="u", **s0._WN_TYPE) is False
-    assert s.artifacts.get_artifact("type.text/x-wordnet")["offer_template"] == "{title} ({pos}): {gloss}"
-
-
 # ── Case is source data (§13.18) ──────────────────────────────────────────────────────────────────
 
 

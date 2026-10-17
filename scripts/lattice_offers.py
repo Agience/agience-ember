@@ -67,8 +67,9 @@ def _load_offer_module():
     not import chorus, enforced by `tests/test_defect_closure_wiring.py` and
     `tests/test_reach_wiring.py`; loading by path keeps this script reaching one named file rather
     than acquiring a dependency the tests forbid. This script reaches
-    `agience-mantle/src` the same way, a few lines below. The module depends only on `re` and
-    `typing`, which is what makes loading it in isolation work.
+    `agience-mantle/src` the same way, a few lines below. The module depends only on the standard
+    library, which is what makes loading it in isolation work. It finds the declared types
+    (`type.json` files) beside itself, in the same checkout.
 
     If the file is in none of the candidate places the script stops. Offers are a projection from
     the type artifact, so a run that could not load the renderer and reported "0 offers written"
@@ -119,19 +120,24 @@ def main() -> int:
     con = store.db.read()
     con.execute("PRAGMA busy_timeout=600000")
 
-    # ── the type artifacts: one keyed read, held for the whole pass ──────────────────────────
+    # ── the describers: one read, held for the whole pass ────────────────────────────────────
+    # A type's `type.json` declares its describer (`offer.declared_types`). A legacy `type.<ct>`
+    # store row is used only for a type no `type.json` declares; some exist nowhere else.
     types: Dict[str, Dict[str, Any]] = {}
     for r in con.execute("SELECT doc FROM vertex WHERE ct = ?",
                          ("application/vnd.agience.content-type+json",)):
         d = json.loads(r["doc"])
         if d.get("declares"):
             types[str(d["declares"])] = d
+    declared = {ct: d for ct, d in O.declared_types().items() if d.get("offer_template")}
+    types.update(declared)
     if not types:
-        print("FATAL: no content-type artifacts in the store. Run the `typedefs` stage first — "
-              "without them there is no offer_template and no schema, so nothing can be "
-              "described. Refusing to guess a shape.", file=sys.stderr)
+        print("FATAL: no describer declared and no content-type artifacts in the store. Without "
+              "them there is no offer_template and no schema, so nothing can be described. "
+              "Refusing to guess a shape.", file=sys.stderr)
         return 2
-    print("type artifacts: %d (%s)" % (len(types), ", ".join(sorted(types)[:4]) + " ..."))
+    print("describers: %d, %d declared (%s)" % (
+        len(types), len(declared), ", ".join(sorted(types)[:4]) + " ..."))
 
     written = skipped = refused = scanned = 0
     reasons: collections.Counter = collections.Counter()

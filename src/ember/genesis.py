@@ -463,10 +463,6 @@ def ingest_stage0_wordnet(store, *, author: str = DEFAULT_AUTHOR,
         return {"skipped": 1, "reason_already_ingested": 1, "live": existing}
 
     _mint_wordnet_source(store, author=author)
-    # The type comes in WITH the rows that need it: a `text/x-wordnet` row is un-renderable without
-    # its describer, and a missing type artifact raises nothing (see stage0_sources._ensure_ctype).
-    from ember.corpus import stage0_sources as _s0
-    _s0._ensure_ctype(store, WORDNET_CONTENT_TYPE, author=author, **_s0._WN_TYPE)
 
     summary = {"synsets": 0, "edges": 0}
     stored: set = set()

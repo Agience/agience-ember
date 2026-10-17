@@ -324,13 +324,28 @@ def _offers_store(tmp):
     return L
 
 
-def test_offers_refuses_when_there_are_no_type_artifacts():
-    """With no type artifacts there is no offer_template and no schema, so nothing can be
-    described. The run stops rather than writing a guessed shape for 6.11M rows — "0 offers
-    written" would look like a clean run over an undescribed corpus."""
+def _without_declared_types(mod):
+    """`mod` with its offer module reporting no declared types, as a checkout without them would."""
+    load = mod._load_offer_module
+
+    def _load_bare():
+        offer = load()
+
+        def _none(root=None):
+            return {}
+        offer.declared_types = _none
+        return offer
+    mod._load_offer_module = _load_bare
+    return mod
+
+
+def test_offers_refuses_when_no_describer_exists():
+    """With no declared describer and no type artifact there is no offer_template and no schema,
+    so nothing can be described. The run stops rather than writing a guessed shape for 6.11M
+    rows — "0 offers written" would look like a clean run over an undescribed corpus."""
     import tempfile
     from mantle.db import open_lattice
-    mod = _load("lattice_offers.py")
+    mod = _without_declared_types(_load("lattice_offers.py"))
     tmp = tempfile.mkdtemp()
     open_lattice(os.path.join(tmp, "c.db"), origin="test")   # store exists, but has no typedefs
     argv = sys.argv
@@ -661,12 +676,12 @@ def test_offers_write_does_NOT_bump_seq_an_offer_is_not_a_new_version():
     tmp = tempfile.mkdtemp()
     L = open_lattice(os.path.join(tmp, "c.db"), origin="test")
     L.artifacts.put_artifact({
-        "id": "type.text/x-wordnet", "content_type": "application/vnd.agience.content-type+json",
-        "declares": "text/x-wordnet", "state": "live", "created_by": "u",
+        "id": "type.text/x-test-lexicon", "content_type": "application/vnd.agience.content-type+json",
+        "declares": "text/x-test-lexicon", "state": "live", "created_by": "u",
         "created_time": "2026-01-01T00:00:00+00:00",
         "offer_template": "the word {lemma}: {gloss}",
         "field_source": {"lemma": "lemmas.0"}})
-    L.artifacts.put_artifact({"id": "wn-x", "content_type": "text/x-wordnet", "state": "live",
+    L.artifacts.put_artifact({"id": "wn-x", "content_type": "text/x-test-lexicon", "state": "live",
                               "created_by": "u", "created_time": "2026-01-01T00:00:00+00:00",
                               "lemmas": ["dog"], "gloss": "a canine"})
     seq_before = L.db.read().execute("SELECT _seq FROM vertex WHERE id='wn-x'").fetchone()[0]
@@ -682,3 +697,30 @@ def test_offers_write_does_NOT_bump_seq_an_offer_is_not_a_new_version():
     row = L.db.read().execute("SELECT _seq, doc FROM vertex WHERE id='wn-x'").fetchone()
     assert _json.loads(row[1])["context"] == "the word dog: a canine", "offer not written"
     assert row[0] == seq_before, "the offer write BUMPED _seq — it minted a spurious version"
+
+
+def test_a_declared_describer_outranks_a_store_row_for_its_type():
+    """A synset's describer is declared once, in Sage's `text/x-wordnet` type.json. A
+    `type.text/x-wordnet` row a store still carries from before is not read for that type."""
+    import tempfile
+    import json as _json
+    from mantle.db import open_lattice
+    mod = _load("lattice_offers.py")
+    tmp = tempfile.mkdtemp()
+    L = open_lattice(os.path.join(tmp, "c.db"), origin="test")
+    L.artifacts.put_artifact({
+        "id": "type.text/x-wordnet", "content_type": "application/vnd.agience.content-type+json",
+        "declares": "text/x-wordnet", "state": "live", "created_by": "u",
+        "created_time": "2026-01-01T00:00:00+00:00",
+        "offer_template": "the word {lemma}: {gloss}", "field_source": {"lemma": "lemmas.0"}})
+    L.artifacts.put_artifact({"id": "wn-dog", "content_type": "text/x-wordnet", "state": "live",
+                              "created_by": "u", "created_time": "2026-01-01T00:00:00+00:00",
+                              "title": "dog", "lemmas": ["dog"], "gloss": "a canine"})
+    argv = sys.argv
+    try:
+        sys.argv = ["x", "--target", os.path.join(tmp, "c.db")]
+        assert mod.main() == 0
+    finally:
+        sys.argv = argv
+    row = L.db.read().execute("SELECT doc FROM vertex WHERE id='wn-dog'").fetchone()
+    assert _json.loads(row[0])["context"] == "dog: a canine"

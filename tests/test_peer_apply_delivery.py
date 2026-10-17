@@ -13,6 +13,14 @@ import pytest
 from mantle.mesh import sync
 
 
+def _wire(monkeypatch):
+    """Wire the sink as Ember's boot does: Mantle hands new docs to whatever sink is wired, and
+    Ember's is `signal.deliver`. The sink is put back unwired after the test."""
+    from ember.runtime import boot
+    monkeypatch.setattr(sync, "_PEER_SIGNAL_SINK", None)
+    boot._wire_peer_signal_delivery()
+
+
 def test_delivery_is_off_by_default():
     """A plain node grounds locally, and the rows still land. Delivery is opt-in because switching
     it on by default fires cognition on every consuming node in the fleet at once."""
@@ -38,6 +46,7 @@ def test_it_fires_on_NEW_docs_only_not_on_reapplies(monkeypatch):
     monkeypatch.setattr(sync, "_DELIVER_PEER_SIGNALS", True)
     monkeypatch.setattr("ember.signal.signal.deliver", _fake_deliver)
     monkeypatch.setattr("ember.runtime.delegate.Delegate.get", staticmethod(lambda store: object()))
+    _wire(monkeypatch)
 
     new_only = [{"id": "a"}, {"id": "b"}]
     sync._deliver_new(object(), new_only)
@@ -72,6 +81,7 @@ def test_a_delivery_failure_is_LOUD_and_never_fatal(monkeypatch, caplog):
 
     monkeypatch.setattr("ember.signal.signal.deliver", _boom)
     monkeypatch.setattr("ember.runtime.delegate.Delegate.get", staticmethod(lambda s: object()))
+    _wire(monkeypatch)
 
     with caplog.at_level(logging.ERROR):
         assert sync._deliver_new(object(), [{"id": "a"}]) is None   # returns nothing, raises nothing

@@ -182,49 +182,8 @@ def _ensure_etype(store, eid: str, direction: str, meaning: str, author: str) ->
     return True
 
 
-CT_CONTENTTYPE = "application/vnd.agience.content-type+json"
-
-
-def _ensure_ctype(store, ct: str, *, template: str, field_source: Dict[str, str],
-                  describer: str, role: str, author: str) -> bool:
-    """Mint the `type.<ct>` artifact that says how rows of this type are described. Idempotent, and
-    it leaves an existing one as it found it.
-
-    Presentation is bootstrapped with the type. A missing type artifact is a legitimate state —
-    `_type_def` returns None and the caller falls back to bare titles — so nothing downstream can
-    report its absence. A type that a source introduces is part of what that source introduces, and
-    this is the only place that knows to create it.
-
-    Leaving an existing row alone is the other half: the describer evolves (B1.13 — recognition is
-    learned), so a re-run of the ingester keeps whatever describer the type has reached."""
-    aid = "type." + ct
-    if store.artifacts.get_artifact(aid) is not None:
-        return False
-    g._mint(store, {
-        "id": aid,
-        "content_type": CT_CONTENTTYPE,
-        "declares": ct,
-        "context": {"kind": "content-type", "declares": ct, "describer": describer, "role": role},
-        "offer_template": template,
-        "field_source": dict(field_source),
-        "lemmas": [ct.lower()],
-        "content": "content type %s: %s" % (ct, role),
-        "provenance": g.P_HUMAN,
-        "created_by": author,
-    })
-    g._ensure_edge(store, aid, g.ONTOLOGY, "member_of")
-    return True
-
-
-# The synset type's own describer. The rows carry `title` and `gloss` as fields, so
-# `{title}: {gloss}` renders exactly what the ingester observed, with no labels or composed prose
-# around the data.
-_WN_TYPE = dict(
-    template="{title}: {gloss}",
-    field_source={"title": "title", "gloss": "gloss"},
-    describer="wordnet.v1",
-    role="a WordNet synset: ONE sense of one or more words, with its definition",
-)
+# A synset's describer (`offer_template`, `field_source`) and its index offer are declared once,
+# in Sage's `text/x-wordnet` type.json, and read from there. Ingest mints no type artifact.
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -406,9 +365,6 @@ def ingest_stage0_oewn(store, *, author: str = DEFAULT_AUTHOR, force: bool = Fal
     author = g._author_ref(store, author)
     if not g.is_bootstrapped(store):
         g.bootstrap(store, author=author)
-    # The type comes in WITH the rows that need it — see `_ensure_ctype`. Before the completion
-    # guard, so a store whose rows landed under an older build still gains the describer.
-    _ensure_ctype(store, g.WORDNET_CONTENT_TYPE, author=author, **_WN_TYPE)
     if oewn_done(store) and not force:
         existing = store.artifacts.count(state="live")
         return {"skipped": 1, "reason_already_ingested": 1, "live": existing, "ingested": 0}
@@ -1006,8 +962,6 @@ def ingest_stage0_omw(store, *, author: str = DEFAULT_AUTHOR, force: bool = Fals
     author = g._author_ref(store, author)
     if not g.is_bootstrapped(store):
         g.bootstrap(store, author=author)
-
-    _ensure_ctype(store, g.WORDNET_CONTENT_TYPE, author=author, **_WN_TYPE)
     g.mint_source_triple(store, "omw", cite_meta={
         "dataset": "Open Multilingual Wordnet 1.4 (license-vetted subset)",
         "provider": "Global WordNet Association / per-language projects",

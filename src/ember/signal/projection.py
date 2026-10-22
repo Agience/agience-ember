@@ -220,8 +220,8 @@ def _write_generation(store, body: Dict[str, Any], *, author: str):
     `(_origin, _seq)` orders the lineage newest-first rather than oldest-first as `versions_of`
     describes: `revise` writes the new version before archiving the old — deliberately, so a crash
     between the two leaves two live heads rather than zero — so the archived prior is re-stamped
-    with the later `_seq`. That is mantle's to reconcile; `superseded_by` is the link that says which
-    came after which.
+    with the later `_seq`. That is mantle's to reconcile; the new generation's `parent_id`, naming the
+    one it was made from, is the link that says which came after which.
 
     Versioning is a requirement on the store, not a fallback. On a store without `head_of`/`revise`
     the derivation raises, because `put_artifact(id=BASIS_ROOT)` would succeed while destroying the

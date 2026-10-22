@@ -117,7 +117,8 @@ def test_a_rebuild_leaves_the_superseded_generation_QUERYABLE(tmp_path, monkeypa
     old = L.artifacts.get_artifact(gen1["id"])
     assert old is not None and old["k"] == k1
     assert np.asarray(old["basis"]).shape == (k1, D)
-    assert old["state"] == "archived" and old["superseded_by"] == gen2["id"]
+    assert old["state"] == "archived"
+    assert gen2["parent_id"] == gen1["id"], "the new generation names the one it was made from"
     # ...and the lineage holds both, sharing one root.
     # Order is not asserted. `versions_of` documents "oldest first" (`ORDER BY _origin, _seq`), but
     # `revise` writes the new version before archiving the old, so the archived prior is re-stamped

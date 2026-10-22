@@ -11,6 +11,7 @@ All notable changes to `agience-ember` are recorded here. The format follows
 - WordNet ingest (`op.source.oewn`, `op.source.omw`, the stage-0 PWN spine) no longer mints a `type.text/x-wordnet` content-type artifact. A synset's describer is declared in Sage's `text/x-wordnet` type.json, beside the offer Mantle indexes.
 - `scripts/lattice_offers.py` takes each type's describer from its type.json declaration when one exists, and from a `type.<ct>` store row only for a type no type.json declares. It stops only when neither exists.
 - `tests/test_peer_apply_delivery.py` wires the peer-signal sink as Ember's boot does before delivering; it tested a direct call Mantle no longer makes, and failed.
+- A basis generation is linked to the one before it by the new generation's `parent_id`, as Mantle now records it; no row carries `superseded_by`.
 
 ## [0.2.0] - 2026-10-09
 

@@ -113,7 +113,7 @@ from ember.runtime.read_path import Result, answer_query
 from ember.runtime.relay import Channel, Disconnected, MeshChannel
 from mantle.shard.store import ShardStore
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     "Ember", "NotInitialised",

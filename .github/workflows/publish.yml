@@ -27,6 +27,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+    branches: ["release/**"]   # the platform release's candidates: build, check, keep
   workflow_dispatch: {}      # manual dry run: builds and twine-checks, publishes nothing
 
 permissions:
@@ -68,6 +69,15 @@ jobs:
           assert declared == ["ember"], "top_level.txt declares %r" % (declared,)
           print("wheel:", whl, "-> ember only")
           PY
+      # A push to `release/<id>` (the platform release's candidate) builds and checks as above and
+      # keeps the files as the `dist` artifact: the release deploys exactly these.
+      - name: Keep the build for the platform release
+        if: startsWith(github.ref, 'refs/heads/release/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

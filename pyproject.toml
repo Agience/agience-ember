@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agience-ember"
-version = "0.2.1"
+version = "0.2.2"
 description = "Ember — an observer unit: the Agience local leaf/cache, two-way, holds its own shards and runs disconnected. Import name is `ember`."
 readme = { file = "README.md", content-type = "text/markdown" }
 # 3.11, matching every package below it. Ember imports `agience-prism`, `agience-crystal` and

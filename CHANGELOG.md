@@ -5,6 +5,11 @@ All notable changes to `agience-ember` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-31
+
+### Changed
+- The lexical index holds only what the store holds in the clear, the platform's public corpus: a row whose fields are sealed, whose body is under its owner's envelope, or whose fields are under the node's key never enters it, and leaves it when it becomes so (`fts.is_sealed`). The index is node-wide and checks no grant; a person's content is searched through Mantle's per-owner index.
+
 ## [0.2.3] - 2026-10-30
 
 ### Changed

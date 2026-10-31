@@ -157,3 +157,27 @@ def test_a_dark_row_is_still_findable_or_it_can_never_be_described():
     dark — the illuminate step could never reach it."""
     d = lx.project_artifact({"id": "wn-a", "title": "dog", "gloss": "a canine"})
     assert d.description or d.title
+
+
+def test_a_sealed_row_never_enters_the_node_wide_index():
+    """This index answers which rows carry a word, for any caller. A person's sealed content is
+    searched through Mantle's per-owner index instead (John, 2026-10-31)."""
+    L = _lattice()
+    lx.index_for(L.db, [_doc("wn-pub", gloss="a domesticated canine")])
+    sealed_ctx = {**_doc("note-sealed", gloss="a domesticated canine"),
+                  "context": '{"content_type": "text/markdown", "sealed": {"p": "x", "blob": "y"}}'}
+    enveloped = {**_doc("note-body", gloss="a domesticated canine"), "content_encrypted": True}
+    lx.index_for(L.db, [sealed_ctx, enveloped])
+    rows = L.db.read().execute(
+        "SELECT m.vertex_id FROM %s JOIN %s m ON m.fts_rowid = %s.rowid WHERE %s MATCH ?"
+        % (lx.FTS_TABLE, lx.MAP_TABLE, lx.FTS_TABLE, lx.FTS_TABLE),
+        (lx.build_match_query("canine"),)).fetchall()
+    assert [r[0] for r in rows] == ["wn-pub"]
+
+
+def test_a_row_that_becomes_sealed_leaves_the_index():
+    L = _lattice()
+    lx.index_for(L.db, [_doc("note-a", gloss="a domesticated canine")])
+    assert lx.coverage_for(L.db)["indexed"] == 1
+    lx.index_for(L.db, [{**_doc("note-a", gloss="a domesticated canine"), "content_encrypted": True}])
+    assert lx.coverage_for(L.db)["indexed"] == 0

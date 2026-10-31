@@ -810,6 +810,26 @@ def make_vertex_resolver(conn: sqlite3.Connection,
 # co-occurrences of the literal word.
 #
 
+def is_sealed(doc: Mapping) -> bool:
+    """Whether a row is someone's sealed content: fields sealed under their key
+    (`mantle.db.doc_boundary.SEALED`, in `context`), a body under their envelope
+    (`content_encrypted`), or fields under the node's key (`node_sealed`).
+
+    This index is node-wide and answers which rows carry a word, with no grant check. It may hold
+    only what the store already holds in the clear, the platform's public corpus. A person's
+    content is searched through Mantle's per-owner index, which checks grants (John, 2026-10-31)."""
+    if doc.get("content_encrypted") or doc.get("node_sealed"):
+        return True
+    ctx = doc.get("context")
+    if isinstance(ctx, str):
+        try:
+            import json
+            ctx = json.loads(ctx or "{}")
+        except ValueError:
+            return False
+    return isinstance(ctx, dict) and "sealed" in ctx
+
+
 def project_artifact(doc: Mapping) -> FtsDocument:
     """An artifact document -> the indexable four fields.
 
@@ -897,7 +917,7 @@ def index_artifacts(conn: sqlite3.Connection, docs: Iterable[Mapping]) -> int:
         if not vid:
             continue
         existed = idx.rowid_for(vid) is not None
-        if str(d.get("state") or "") == "archived":
+        if str(d.get("state") or "") == "archived" or is_sealed(d):
             # `retract_artifact` bumps the counter itself, which is why no `delta` is applied
             # here.
             #

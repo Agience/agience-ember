@@ -102,3 +102,12 @@ def _suite_store_environment(tmp_path_factory):
     mp.setenv("EMBER_SQLITE_CREATE", "1")
     yield
     mp.undo()
+
+
+@_pytest.fixture(autouse=True, scope="session")
+def _init_test_encryption_key():
+    """A test value for the node's data key, which the lexical index derives its keyed tokens from
+    (`ember.corpus.fts._token`), as mantle's suite sets it."""
+    from cryptography.fernet import Fernet
+    import prism.trust.key_manager as _km
+    _km._encryption_key = Fernet.generate_key().decode()

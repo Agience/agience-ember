@@ -5,6 +5,11 @@ All notable changes to `agience-ember` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-30
+
+### Changed
+- The lexical index (`ember.corpus.fts`) holds keyed tokens, never words: each word is stemmed by FTS5's `porter` and replaced by a keyed token of the stem (`mantle.db.node_seal.keyed_token`), and a query and a document-frequency lookup are tokenized the same way, so BM25 and the frequencies are unchanged. The tables are `fts_kt`, `fts_kt_map` and `fts_kt_vocab`, counted by `fts_kt:total`; `rebuild_from_vertices` drops a plaintext index an earlier version wrote. Requires `agience-mantle>=0.1.9`.
+
 ## [0.2.2] - 2026-10-29
 
 ### Added

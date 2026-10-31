@@ -26,22 +26,19 @@ from ember.corpus import fts as F
 
 @pytest.fixture()
 def indexed() -> sqlite3.Connection:
-    """A real FTS5 index with the production schema, so the stemmer under test is the real one."""
+    """A real FTS5 index written by the production path, so the stemmer under test is the real one
+    and the vocab holds what production's holds: keyed tokens of stems."""
     conn = sqlite3.connect(":memory:")
+    idx = F.FtsIndex(conn)
     try:
-        conn.execute(
-            "CREATE VIRTUAL TABLE %s USING fts5(title, description, tags, content, "
-            "content='', contentless_delete=1, tokenize='porter unicode61')" % F.FTS_TABLE)
+        idx.ensure_schema()
     except sqlite3.OperationalError:                      # pragma: no cover
         pytest.skip("this sqlite build has no fts5")
-    conn.execute("CREATE VIRTUAL TABLE %s USING fts5vocab(%s, row)"
-                 % (F.VOCAB_TABLE, F.FTS_TABLE))
     rows = [("university of the air", "", "", "a university offering courses"),
             ("universe", "", "", "everything that exists anywhere"),
             ("universal joint", "", "", "a universal coupling"),
             ("water", "", "", "binary compound of oxygen and hydrogen")]
-    conn.executemany("INSERT INTO %s(title, description, tags, content) VALUES (?,?,?,?)"
-                     % F.FTS_TABLE, rows)
+    idx.index_many(F.FtsDocument(str(i), *r) for i, r in enumerate(rows))
     conn.commit()
     return conn
 
@@ -114,10 +111,12 @@ class TestASurfaceFormMustNotShadowItsStem:
 
     @staticmethod
     def _vocab(pairs):
-        """A stand-in vocab table holding exactly `pairs`, with the production table names."""
+        """A stand-in vocab table holding exactly `pairs`, with the production table names and each
+        term stored as the index stores it, as its keyed token."""
         conn = sqlite3.connect(":memory:")
         conn.execute("CREATE TABLE %s (term TEXT PRIMARY KEY, doc INTEGER)" % F.VOCAB_TABLE)
-        conn.executemany("INSERT INTO %s(term, doc) VALUES (?,?)" % F.VOCAB_TABLE, pairs)
+        conn.executemany("INSERT INTO %s(term, doc) VALUES (?,?)" % F.VOCAB_TABLE,
+                         [(F._token(term), doc) for term, doc in pairs])
         conn.commit()
         return conn
 

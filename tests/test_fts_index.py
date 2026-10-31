@@ -46,7 +46,8 @@ def test_the_posting_resolves_back_to_ITS_document():
                       _doc("wn-cat", gloss="a domesticated feline")])
     rows = L.db.read().execute(
         "SELECT m.vertex_id FROM %s JOIN %s m ON m.fts_rowid = %s.rowid "
-        "WHERE %s MATCH 'canine'" % (lx.FTS_TABLE, lx.MAP_TABLE, lx.FTS_TABLE, lx.FTS_TABLE)).fetchall()
+        "WHERE %s MATCH ?" % (lx.FTS_TABLE, lx.MAP_TABLE, lx.FTS_TABLE, lx.FTS_TABLE),
+        (lx.build_match_query("canine"),)).fetchall()
     assert [r[0] for r in rows] == ["wn-dog"]
 
 
@@ -78,7 +79,8 @@ def test_reindexing_replaces_rather_than_accumulates():
         "SELECT count(*) FROM %s WHERE vertex_id='wn-a'" % lx.MAP_TABLE).fetchone()[0] == 1
     # and re-indexing leaves the term frequency where it was
     assert L.db.read().execute(
-        "SELECT count(*) FROM %s WHERE %s MATCH 'canine'" % (lx.FTS_TABLE, lx.FTS_TABLE)).fetchone()[0] == 1
+        "SELECT count(*) FROM %s WHERE %s MATCH ?" % (lx.FTS_TABLE, lx.FTS_TABLE),
+        (lx.build_match_query("canine"),)).fetchone()[0] == 1
 
 
 def test_an_archived_snapshot_leaves_the_searchable_index():

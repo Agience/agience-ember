@@ -1,30 +1,21 @@
-"""Lexical retrieval — FTS5 BM25. LATTICE-IMPLEMENTATION.md §2.1, Phase 2.1.
+"""Lexical retrieval — FTS5 BM25 over blind tokens. LATTICE-IMPLEMENTATION.md §2.1, Phase 2.1.
 
-This index holds PLAINTEXT terms — read this before indexing anything
+The index holds keyed tokens, never words
 ────────────────────────────────────────────────────────────────────────
-Every word of every document indexed here is written to the SQLite file in the
-clear, as FTS5 posting lists. Anyone who can read the `.db` file can enumerate
-the corpus vocabulary (`SELECT term FROM fts_vocab`) and can reconstruct a good
-deal of each document from its postings. Stemmed terms, their document
-frequencies and their per-document counts are all recoverable without a key.
+Each word is stemmed by FTS5's own `porter` and replaced by a keyed token of the stem
+(`mantle.db.node_seal.keyed_token`, purpose `ember.fts-term`), and only the tokens reach the
+index. Equal stems give equal tokens, so term frequency, document frequency and BM25 are exactly
+what they were over the stems; the vocabulary table holds tokens, and a word cannot be read back
+from one without the node's key. A query is tokenized the same way before it is matched.
 
-That is the trade this module makes, deliberately: FTS5's Okapi BM25 runs inside
-the SQLite core over cleartext postings, which is why ranking costs nothing here
-and needs no client-side work.
+That keeps the corpus out of the store's files and backups. It does not keep it from the node,
+which holds the key, and it is not Mantle's per-principal index (`mantle/search/mantle/sse/`):
+term counts per document remain visible, as Mantle's own SSE cells reveal theirs.
 
-**It inherits no encryption property from mantle.** Mantle removed this module
-(commit `a7cfd0c`) as a privacy decision rather than a cleanup. Mantle's search
-path is a searchable-symmetric-encryption index: the server holds HMAC'd tokens
-and never words, precisely so that holding the index does not disclose the
-corpus. This module is the opposite arrangement. A node that vendors it does not
-acquire mantle's property, and nothing in mantle's SSE design covers what gets
-written here.
-
-Whether a plaintext index is acceptable is ember's call to make — an ember node's
-lattice is node-local, and may hold only content that node already stores in the
-clear — but it is a call, made per corpus, not a property inherited by moving the
-file. If anything indexed here is not already plaintext-at-rest on this node,
-this is the wrong index for it and mantle's SSE index is the right one.
+The tables carry the token format in their names (`fts_kt`, `fts_kt_map`, `fts_kt_vocab`), so an
+index written in plaintext by an earlier version (`fts`, `fts_map`, `fts_vocab`) is never read as a
+blind one. `PLAINTEXT_TABLES` names those; `rebuild_from_vertices` drops them, and Mantle's release
+migration drops them from its store (`mantle.system.drop_plaintext_index`).
 ────────────────────────────────────────────────────────────────────────
 
 Provenance
@@ -93,6 +84,7 @@ retrieval.py`) is the consumer. Four load-bearing facts:
 """
 from __future__ import annotations
 
+import functools
 import re
 import sqlite3
 import threading
@@ -104,13 +96,19 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 # these silently re-assigns every weight to the wrong field.
 FIELDS: Tuple[str, ...] = ("title", "description", "tags", "content")
 
-FTS_TABLE = "fts"
-MAP_TABLE = "fts_map"
+FTS_TABLE = "fts_kt"
+MAP_TABLE = "fts_kt_map"
 # fts5vocab over the index: one row per distinct term with `doc` = the number of documents
 # carrying it. That IS document frequency, read off the index — exact, no scan, no cap. It exists
 # so nothing has to approximate df by counting matches with a LIMIT (which saturates: every term
 # past the limit reports the same number and becomes indistinguishable).
-VOCAB_TABLE = "fts_vocab"
+VOCAB_TABLE = "fts_kt_vocab"
+
+#: The plaintext index an earlier version wrote, with FTS5's shadow tables.
+PLAINTEXT_TABLES: Tuple[str, ...] = ("fts_vocab", "fts", "fts_map", "fts_data", "fts_idx",
+                                     "fts_content", "fts_docsize", "fts_config")
+
+_TOKEN_PURPOSE = "ember.fts-term"
 
 # Lumen's budget (§A.1 / retrieval.py:23-29). Ours must not exceed Lumen's, or
 # we spend bytes it will throw away.
@@ -251,6 +249,39 @@ class _Stemmer:
 _STEMMER = _Stemmer()
 
 
+@functools.lru_cache(maxsize=1 << 16)
+def _token(stem: str) -> str:
+    """The keyed token for one stem: hex, so FTS5's tokenizer keeps it as one term. Raises when
+    this process holds no node key, so nothing is indexed in the clear."""
+    from mantle.db import node_seal
+    _ensure_node_key()
+    return node_seal.keyed_token(_TOKEN_PURPOSE, stem).split(":", 1)[1]
+
+
+def _ensure_node_key() -> None:
+    """Load the node's data key into this process if nothing has: a service that never seals
+    content (ember's reader, sage) still reads the index. A key already loaded is kept."""
+    from prism.trust import key_manager
+    try:
+        key_manager.get_encryption_key()
+    except RuntimeError:
+        try:
+            key_manager.init_encryption_key()
+        except Exception:  # noqa: BLE001 — no key on this node; the token then refuses
+            pass
+
+
+def blind_terms(words: Sequence[str]) -> List[str]:
+    """Each word's stem, as FTS5's `porter unicode61` stems it, replaced by its keyed token."""
+    words = [w for w in words if w]
+    stems = _STEMMER.stem_many(words)
+    return [_token(stems[w.lower()]) for w in words]
+
+
+def _blind(text: str) -> str:
+    return " ".join(blind_terms([t for _, _, t in tokenize_spans(text or "")]))
+
+
 def document_frequency(conn: sqlite3.Connection, term: str) -> Optional[int]:
     """How many documents carry `term` — exact, read off `fts5vocab`.
 
@@ -305,17 +336,17 @@ def document_frequency(conn: sqlite3.Connection, term: str) -> Optional[int]:
         return None
     try:
         row = conn.execute(
-            f"SELECT doc FROM {VOCAB_TABLE} WHERE term = ?", (word,)
+            f"SELECT doc FROM {VOCAB_TABLE} WHERE term = ?", (_token(word),)
         ).fetchone()
         surface = int(row[0]) if row else None
         stem = _STEMMER.stem_many([word]).get(word)
         stemmed = None
         if stem and stem != word:
             row = conn.execute(
-                f"SELECT doc FROM {VOCAB_TABLE} WHERE term = ?", (stem,)
+                f"SELECT doc FROM {VOCAB_TABLE} WHERE term = ?", (_token(stem),)
             ).fetchone()
             stemmed = int(row[0]) if row else None
-    except sqlite3.Error:
+    except (sqlite3.Error, RuntimeError):     # RuntimeError: no node key here, so no token
         return None
     if surface is None and stemmed is None:
         return 0
@@ -331,11 +362,11 @@ def build_match_query(text: str, *, conjunctive: bool = False) -> str:
     single absent word yields zero hits and therefore zero grounding, whereas
     under OR BM25 does the discriminating — which is its job.
     """
-    terms = [t for _, _, t in tokenize_spans(text)]
+    terms = blind_terms([t for _, _, t in tokenize_spans(text)])
     if not terms:
         return ""
     joiner = " AND " if conjunctive else " OR "
-    return joiner.join('"' + t.replace('"', '""') + '"' for t in terms)
+    return joiner.join('"' + t + '"' for t in dict.fromkeys(terms))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -479,7 +510,7 @@ class FtsIndex:
         self.conn.execute(
             f"CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE} USING fts5("
             f"  {', '.join(FIELDS)},"
-            f"  content=''{opt}, tokenize='porter unicode61')"
+            f"  content=''{opt}, tokenize='unicode61')"
         )
         self.conn.execute(
             f"""CREATE TABLE IF NOT EXISTS {MAP_TABLE} (
@@ -537,7 +568,7 @@ class FtsIndex:
             rid = self.rowid_for(doc.vertex_id, create=True)   # fresh: nothing to purge
         self.conn.execute(
             f"INSERT INTO {FTS_TABLE}(rowid, {', '.join(FIELDS)}) "
-            f"VALUES(?,?,?,?,?)", (rid,) + doc.field_values())
+            f"VALUES(?,?,?,?,?)", (rid,) + tuple(_blind(v) for v in doc.field_values()))
         return rid
 
     def index_many(self, docs: Iterable[FtsDocument]) -> int:
@@ -821,7 +852,9 @@ def project_artifact(doc: Mapping) -> FtsDocument:
 # dereferences every record and this package bans it outright — `test_no_count_star_reaches_sqlite`
 # enforces it. The counter is bumped in the same transaction as the posting, so it cannot drift
 # from what it counts.
-C_FTS_TOTAL = "fts:total"
+#: Its own name, not the plaintext index's `fts:total`, which `mantle.system.drop_plaintext_index`
+#: deletes with the tables it counted.
+C_FTS_TOTAL = "fts_kt:total"
 
 
 def _bump(conn: sqlite3.Connection, delta: int) -> None:
@@ -832,7 +865,7 @@ def _bump(conn: sqlite3.Connection, delta: int) -> None:
 def retract_artifact(conn: sqlite3.Connection, vertex_id: str) -> bool:
     """Remove one artifact from the lexical index — postings, map row, and the counted total.
 
-    Without this call the deleted id stays ranked first for its own words, and `fts:total`
+    Without this call the deleted id stays ranked first for its own words, and `fts_kt:total`
     reads one higher than the rows the index holds (`test_delete_artifact_retracts_the_lexical_index`).
 
     Returns True when something was actually retracted. A store whose index was never built
@@ -890,6 +923,8 @@ def rebuild_from_vertices(conn: sqlite3.Connection, *, doc_column: str = "doc") 
     """Rebuild the whole index from the vertex table — for a store whose rows
     landed before the writer indexed them."""
     import json
+    drop_plaintext(conn)
+    conn.execute(f"DROP TABLE IF EXISTS {VOCAB_TABLE}")
     conn.execute(f"DROP TABLE IF EXISTS {FTS_TABLE}")
     conn.execute(f"DROP TABLE IF EXISTS {MAP_TABLE}")
     conn.execute("CREATE TABLE IF NOT EXISTS counter (name TEXT PRIMARY KEY, n INTEGER NOT NULL)")
@@ -902,6 +937,15 @@ def rebuild_from_vertices(conn: sqlite3.Connection, *, doc_column: str = "doc") 
         except Exception:
             continue
     return index_artifacts(conn, docs)
+
+
+def drop_plaintext(conn: sqlite3.Connection) -> List[str]:
+    """Drop the plaintext index an earlier version wrote. Returns the tables dropped."""
+    have = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    gone = [name for name in PLAINTEXT_TABLES if name in have]
+    for name in gone:
+        conn.execute(f"DROP TABLE IF EXISTS {name}")
+    return gone
 
 
 def is_built(conn: sqlite3.Connection) -> bool:

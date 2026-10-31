@@ -130,9 +130,10 @@ def _corpus_rows(conn) -> float:
 
 
 def _match_expr(ts: Sequence[str]) -> str:
-    """A safe FTS5 MATCH: every term quoted (so punctuation/operators can't reach the parser) and
-    OR-ed, so BM25 ranks by how much of the query each document carries."""
-    return " OR ".join(_q(t) for t in ts)
+    """A safe FTS5 MATCH: every term as the index holds it, its keyed token (`fts.blind_terms`),
+    quoted so nothing reaches the parser, and OR-ed, so BM25 ranks by how much of the query each
+    document carries."""
+    return " OR ".join(_q(t) for t in dict.fromkeys(_fts.blind_terms(list(ts))))
 
 
 __all__ = ["terms", "_q", "_df", "_corpus_rows", "_salient", "_match_expr"]

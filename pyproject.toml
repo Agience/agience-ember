@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agience-ember"
-version = "0.2.2"
+version = "0.2.3"
 description = "Ember — an observer unit: the Agience local leaf/cache, two-way, holds its own shards and runs disconnected. Import name is `ember`."
 readme = { file = "README.md", content-type = "text/markdown" }
 # 3.11, matching every package below it. Ember imports `agience-prism`, `agience-crystal` and
@@ -79,8 +79,9 @@ dependencies = [
                           # without changing the API, and `prism.vectors/screen_read_vectors.json`
                           # pins the values this version produces. Move this pin and the vectors
                           # together (optics.py's runtime check is major.minor only).
-    "agience-mantle>=0.1.3",  # Apache — mantle.search.anchors is the shared coordinate system,
-                          # mantle.db is the store, mantle.shard is the cache/store/local
+    "agience-mantle>=0.1.9",  # Apache — mantle.search.anchors is the shared coordinate system,
+                          # mantle.db is the store (0.1.9: `node_seal`, the lexical index's keyed
+                          # tokens), mantle.shard is the cache/store/local
                           # collection layer, and mantle.mesh is the mesh. Module-level imports in
                           # runtime/boot.py, corpus/ingest.py and ember/__init__.py — a hard edge,
                           # not a lazy one. Mantle imports nothing from ember, so the DAG stays

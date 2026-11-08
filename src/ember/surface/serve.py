@@ -57,29 +57,45 @@ def _is_local_only_op(op: str) -> bool:
     return str(op).startswith("op.dev.")
 
 
+#: The audience a delegation for Ember carries (Origin's token exchange, `aud=ember`).
+EMBER_AUDIENCE = "ember"
+
+
 def _origin_subject(handler) -> Optional[str]:
-    """The subject of a verified Origin access token on this request, or None.
+    """The person a verified Origin delegation for Ember names, or None.
 
-    `verify_access_token` is prism's one verifier for a caller's identity: the signature against
-    origin's published JWKS, then the claim rule in `prism.access_token`. That rule refuses what a
-    signature alone accepts — Origin's refresh, email-verification and password-reset tokens are
-    signed with the same key — and requires a user token to be addressed to the authority issuer.
-    Ember answers to no server client id, so no delegation is minted for it and none is accepted
-    (`delegation_audiences=()`).
+    Ember takes only a delegation addressed to it (review 8, R3): `principal_type` `delegation`,
+    `aud` `ember` and `act.sub` `ember`, short-lived, never a platform-admin scope. A caller's full
+    platform token is refused here, so Ember never holds one; a client exchanges it at Origin first.
+    `verify_access_token` checks the signature against Origin's published keys and the claim rule
+    (`prism.access_token`), with `ember` as the only delegation audience accepted.
 
-    Fails closed: an invalid signature, unknown key, expired token, refused claim or missing trust
-    anchor yields None, never a partial or assumed identity."""
+    Fails closed: an invalid signature, unknown key, expired token, refused claim, a token for any
+    other audience, or a full platform token yields None."""
     try:
         raw = handler.headers.get("Authorization") or ""
-        if raw.lower().startswith("bearer "):
-            tok = raw[7:].strip()
-            if tok:
-                from prism.trust.authority_trust import verify_access_token as _verify
-                sub = str(_verify(tok, delegation_audiences=()).get("sub") or "").strip()
-                return sub or None
+        if not raw.lower().startswith("bearer "):
+            return None
+        tok = raw[7:].strip()
+        if not tok:
+            return None
+        from prism.trust.authority_trust import verify_access_token as _verify
+        claims = _verify(tok, delegation_audiences=(EMBER_AUDIENCE,))
+        aud = claims.get("aud")
+        auds = set(aud) if isinstance(aud, (list, tuple)) else {aud}
+        act = claims.get("act") if isinstance(claims.get("act"), dict) else {}
+        scope = str(claims.get("scope") or "").split()
+        if (claims.get("principal_type") != "delegation" or EMBER_AUDIENCE not in auds
+                or act.get("sub") != EMBER_AUDIENCE or "platform:admin" in scope):
+            return None
+        # Origin's sign-in bounds (review 11, M2): issued before its person signed out, refused.
+        from prism.trust import not_before
+        if not_before.refused(claims):
+            return None
+        sub = str(claims.get("sub") or "").strip()
+        return sub or None
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _holds_invoke_token(handler) -> bool:
@@ -97,22 +113,57 @@ def _holds_invoke_token(handler) -> bool:
 class _Caller(NamedTuple):
     """An authenticated caller, for the paths that write.
 
-    `principal` is whose scope a write lands in: the token's subject, the principal a token holder
-    names in `X-Ember-Principal`, or None for the node's own principal. `operator` is True only for
-    the holder of `EMBER_INVOKE_TOKEN`, the one credential `/v1/invoke` accepts."""
+    `principal` is whose scope a write lands in: the subject of Origin's delegation for Ember, or
+    None for the node's own principal. `operator` is True only for the holder of
+    `EMBER_INVOKE_TOKEN`, the one credential `/v1/invoke` accepts, which runs the node's own
+    operators and never chooses a principal (review 21, F3)."""
     principal: Optional[str]
     operator: bool
+    #: The caller's delegation for Ember, when they presented one. Ember exchanges it at Origin for
+    #: one addressed to Mantle before a write into their scope (`ember.mantle_api.for_caller`);
+    #: it is never forwarded, and never Ember's own credential.
+    token: Optional[str] = None
+
+
+def _bearer(handler) -> Optional[str]:
+    raw = handler.headers.get("Authorization") or ""
+    return (raw[7:].strip() or None) if raw.lower().startswith("bearer ") else None
+
+
+def _mantle_for(caller: Optional["_Caller"]):
+    """Mantle's API on the caller's credential addressed to Mantle, which Ember obtains by its
+    own exchange at Origin (review 21, F6); None with no Mantle, no delegation of theirs, or no
+    exchange. The delegation sent to Ember is never forwarded."""
+    if caller is None or not caller.token:
+        return None
+    from ember import mantle_api
+    return mantle_api.MantleAPI.for_caller(caller.token)
 
 
 def _verified_caller(handler) -> Optional[_Caller]:
     """The authenticated caller of this request, or None for an unauthenticated one."""
     sub = _origin_subject(handler)
     if sub:
-        return _Caller(principal=sub, operator=_holds_invoke_token(handler))
+        return _Caller(principal=sub, operator=_holds_invoke_token(handler),
+                       token=_bearer(handler))
     if _holds_invoke_token(handler):
-        return _Caller(principal=(handler.headers.get("X-Ember-Principal") or "").strip() or None,
-                       operator=True)
+        return _Caller(principal=None, operator=True)
     return None
+
+
+#: The operators that act in a principal's scope. On `/v1/invoke` they act for the verified
+#: caller only (review 21, F3).
+_SCOPED_OPERATORS = frozenset({"op.remember", "op.share"})
+
+
+def _invoke_arguments(op: str, arguments: Optional[dict], caller: Optional[_Caller]) -> dict:
+    """`/v1/invoke`'s arguments as run: for an operator that acts in a principal's scope, the
+    `principal` is the verified caller's (None, the node's own, on the shared token alone),
+    whatever the request named. The shared token never chooses a principal."""
+    args = dict(arguments or {})
+    if op in _SCOPED_OPERATORS:
+        args["principal"] = caller.principal if caller is not None else None
+    return args
 
 
 def _browser_origin_allowed(handler) -> bool:
@@ -140,11 +191,12 @@ def _resolve_delegate(handler, store):
     per-principal keying separate one delegate from another. Without it every request in the process
     collapses onto whatever `genesis._principal()` reads from the environment.
 
-    Identity from a header is honoured only behind the shared secret. An unauthenticated header
-    naming a delegate is a spoofing vector: it would let any caller read another agent's memory by
-    asking as them. So a header is trusted only when `EMBER_INVOKE_TOKEN` is set and matches, the
-    same gate `/v1/invoke` uses. With no token set, the result is the commons delegate. Fails
-    closed: any error resolving yields the commons delegate.
+    Identity comes from Origin's delegation for Ember and from nothing else. A header naming a
+    delegate (`X-Ember-Principal`, `X-Ember-Delegate`) names nobody, even behind the shared
+    `EMBER_INVOKE_TOKEN` (review 21, F3): that token is the node operator's for the node's own
+    operators, and its holder never chooses whose memory a request reads. Without a delegation
+    the result is the commons delegate. Fails closed: any error resolving yields the commons
+    delegate.
 
     The commons delegate is the fallback. The process delegate is not, because it carries
     `EMBER_PRINCIPAL`, a real person on every deployed node — see §3.
@@ -170,16 +222,7 @@ def _resolve_delegate(handler, store):
     if _sub:
         return Delegate.get(store, person=_sub)
 
-    # ── 2. shared-secret header (internal/trusted callers only) ──────────────────────────────────
-    try:
-        if _holds_invoke_token(handler):
-            person = (handler.headers.get("X-Ember-Principal") or "").strip() or None
-            did = (handler.headers.get("X-Ember-Delegate") or "").strip() or None
-            if person or did:
-                return Delegate.get(store, person=person, id=did)
-    except Exception:
-        pass
-    # ── 3. the commons — no verified identity, which is not the same as no one.
+    # ── 2. the commons — no verified identity, which is not the same as no one.
     #
     # The principal is `curate.COMMONS_PRINCIPAL`, named for what it is rather than
     # for an absence. An unauthenticated reader is the commons itself, reading what the commons
@@ -265,7 +308,8 @@ def _control_answer(store, query: str, caller: Optional[_Caller] = None):
                 # Nothing was invoked, so nothing grounds this reply.
                 return ("Not stored: remembering writes to a private collection, and this request "
                         "is not authenticated. Send an Origin access token as a Bearer token."), []
-            r = genesis.remember(store, text, principal=caller.principal)
+            r = genesis.remember(store, text, principal=caller.principal,
+                                 mantle=_mantle_for(caller))
             if not r.get("stored"):
                 return f"Did not store: {r.get('reason')}", []
             return (f"Noted — stored privately, only for you (owner-scoped, no_share + no_promote). "
@@ -397,6 +441,13 @@ def _log_once_no_answerer() -> None:
           file=sys.stderr, flush=True)
 
 
+#: The answer to a turn nothing resonates with: the composer's own computed null.
+EMPTY_TEXT = "Nothing resonates with that yet."
+#: What a caller is told when the answer rests on something they may not read. The same words as
+#: any empty answer, so it never shows that a hidden match exists (review 10, R13).
+WITHHELD_TEXT = EMPTY_TEXT
+
+
 def _answer_text(ember, query: str, k: int = 6, *, store=None) -> tuple:
     """Return (text, grounded, cited). Routes lexical needs to the dictionary (keyed) path and
     conceptual needs to embedding retrieval; citations ride in the returned `cited` rather than in
@@ -462,8 +513,12 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
                 ember = None
         except Exception:
             ember = None                   # store-only deploy: no semantic index / no embedder
+    # Ember's store is its own; Mantle's data is reached over Mantle's API. Refused before the
+    # store-only fallback below can swallow it.
+    from ember import mantle_api as _mantle_api
+    _mantle_api.refuse_mantle_store()
     try:
-        from mantle.shard.local_store import open_store
+        from ember.mantle_api import open_own_store as open_store
         from ember.runtime import runner
         store = open_store()
         runner.attach(store)               # store bundles
@@ -826,7 +881,10 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
                     self._send({"error": "invalid or missing invoke token"}, 401); return
                 try:
                     from ember import genesis
-                    self._send(genesis.invoke(store, op, req.get("arguments") or {}))
+                    caller = _verified_caller(self)
+                    self._send(genesis.invoke(store, op,
+                                              _invoke_arguments(op, req.get("arguments"), caller),
+                                              mantle=_mantle_for(caller)))
                 except Exception as e:
                     self._send({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
                 return
@@ -841,7 +899,8 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
                 return
             query = _last_user(req.get("messages", []))
             faults: List[str] = []
-            control = _control_answer(store, query, _verified_caller(self))
+            caller = _verified_caller(self)
+            control = _control_answer(store, query, caller)
             if control is not None:
                 # One rule for groundedness on every arm of this handler: citing implies grounded.
                 text, cited = control
@@ -915,6 +974,10 @@ def serve_openai(port: int = 8091, host: str = "127.0.0.1", ember=None, *, k: in
                         _note_fault(faults, "activation", e)
                 if text is None:                                  # nothing activated -> keyed/semantic
                     text, grounded, cited = _answer_text(ember, query, k=k, store=store)
+                # A row from Mantle reaches this caller only if they may Read it there now.
+                from ember import mantle_api as _mantle_api
+                if cited and not _mantle_api.readable_by(cited, _mantle_for(caller)):
+                    text, grounded, cited = WITHHELD_TEXT, False, []
             cid = "ember-" + str(abs(hash(query)) % (10 ** 12))
 
             if req.get("stream"):

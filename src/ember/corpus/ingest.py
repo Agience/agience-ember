@@ -481,7 +481,7 @@ def ingest_to_store(paths=None, *, wordnet: bool = False, wiki_dump: Optional[st
     Uses the same describe-operator mechanism as the platform (operators.invoke mirrors
     Mantle's InvokeArtifactRequest). Strictly local + deterministic."""
     import shutil
-    from mantle.shard.local_store import open_store
+    from ember.mantle_api import open_own_store as open_store
     from ember.runtime.runner import operators as ops
 
     store = open_store()
@@ -595,7 +595,7 @@ def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Op
     and passed in rather than rebuilt, so a reindex lands in the same cells as before. No
     re-observation, no re-describe — the offers already live in the store."""
     import shutil
-    from mantle.shard.local_store import open_store
+    from ember.mantle_api import open_own_store as open_store
     from ember.runtime.runner import operators as ops
     store = open_store()
     s = load_settings()
@@ -605,6 +605,7 @@ def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Op
     # index is touched. A precondition checked after the destructive step is not a precondition.
     rows: List[Tuple[str, bytes, str]] = []
     rungs: List[str] = []
+    authors: List[str] = []
     for a in store.artifacts.list_artifacts(state="live"):
         if a.get("content_type") == ops.OPERATOR_CONTENT_TYPE:  # skip operator artifacts in the retrieval index
             continue
@@ -613,6 +614,11 @@ def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Op
         rows.append((a["id"], content, offer))
         # preserves the stored rung; see the put loop below.
         rungs.append(str(a.get("provenance") or Provenance.OBSERVED))
+        authors.append("ember-local")
+    # Ember's index holds Ember's own corpus and none of Mantle's rows (review 10, R7): a row a
+    # caller may not read can then never reach an answer, whatever the answer cites.
+    from ember import mantle_api
+    mantle_api.refuse_mantle_rows(rows)
     if not rows:
         raise ValueError("store is empty — nothing to rebuild from")
 
@@ -634,11 +640,11 @@ def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Op
     # because that is what a locally-read file genuinely is; a doc that records a lower rung keeps
     # it. Grouped because `cache.put` takes one rung per call, and the groups are tiny in practice
     # (a handful of distinct rungs across the corpus).
-    order = sorted(range(len(rows)), key=lambda j: rungs[j])
-    grouped: Dict[str, List[int]] = {}
+    order = sorted(range(len(rows)), key=lambda j: (rungs[j], authors[j]))
+    grouped: Dict[Tuple[str, str], List[int]] = {}
     for j in order:
-        grouped.setdefault(rungs[j], []).append(j)
-    for rung, idxs in grouped.items():
+        grouped.setdefault((rungs[j], authors[j]), []).append(j)
+    for (rung, author), idxs in grouped.items():
         try:
             prov = Provenance(rung)
         except Exception:
@@ -646,7 +652,7 @@ def rebuild_index_from_store(*, embedder: Optional[Embedder] = None, anchors: Op
         for i in range(0, len(idxs), batch):
             chunk = idxs[i:i + batch]
             vecs = [(rows[j][0], rows[j][1], vectors[j]) for j in chunk]
-            ember.cache.put(vecs, version=1, authority="ember-local", priv=priv, provenance=prov)
+            ember.cache.put(vecs, version=1, authority=author, priv=priv, provenance=prov)
     ember.flush()
     return ember, len(rows), store
 

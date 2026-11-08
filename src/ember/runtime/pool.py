@@ -520,7 +520,7 @@ def _hb_path(store) -> Optional[Path]:
 
 
 def pool_worker(worker_id: str, *, interval: float = 5.0, max_ticks: Optional[int] = None) -> int:
-    from mantle.shard.local_store import open_store
+    from ember.mantle_api import open_own_store as open_store
     from ember import genesis
     store = open_store()
     # Light startup: the supervisor already froze the schema + registered operators. Registering
@@ -624,7 +624,7 @@ def supervise(*, max_workers: Optional[int] = None, interval: float = 15.0,
     """The autoscaler. Each cycle: schedule (enqueue needed tasks), then size the fleet to the
     backlog — spawn pool workers when tasks are pending (up to `max_workers`), retire idle ones
     when the queue drains. Dynamic scaling, within the system."""
-    from mantle.shard.local_store import open_store
+    from ember.mantle_api import open_own_store as open_store
     from ember import genesis
     # Startup must be resilient too: under load the initial bootstrap can hit a store read
     # timeout (observed on ArcadeDB) before the loop guard begins — orphaning nothing yet, but

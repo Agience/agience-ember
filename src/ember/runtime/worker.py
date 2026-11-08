@@ -190,7 +190,7 @@ def _tick(bundle, *, ingest: bool = False, consolidate: bool = False) -> dict:
 
 def run(*, interval: float = 60.0, max_ticks: Optional[int] = None, ingest: bool = False,
         consolidate_every: int = 0, clock=time.time) -> int:
-    from mantle.shard.local_store import open_store
+    from ember.mantle_api import open_own_store as open_store
     from ember.runtime import runner
     bundle = open_store()
     runner.attach(bundle)                          # store bundles outrank shipped (first load pins)
@@ -337,7 +337,7 @@ def run_aggregator(*, interval: float = 20.0) -> int:
     import threading
     import time
     from pathlib import Path
-    from mantle.shard.local_store import open_store
+    from ember.mantle_api import open_own_store as open_store
     from ember import genesis
     store = open_store()
     hbp = (Path(store.keys_dir).parent / "worker.log") if store.keys_dir else Path("worker.log")

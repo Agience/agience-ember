@@ -5,6 +5,50 @@ All notable changes to `agience-ember` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-08
+
+### Changed (review 31)
+- The `agience-prism` floor is 0.1.9, the `host` extra's included.
+
+### Changed (review 22)
+- Ember's own credential, a delegation narrowed to Ember, is exchanged at Origin for one addressed to Mantle before Ember's own calls there; a token addressed to Ember is never sent.
+
+### Changed (review 21)
+- `EMBER_INVOKE_TOKEN` runs the node's own operators and chooses no principal: `X-Ember-Principal` and `X-Ember-Delegate` name nobody, and `/v1/invoke` gives `op.remember` and `op.share` the verified caller's principal.
+- A person's write into Mantle is made on the delegation Origin addresses to Mantle, from Ember's own exchange of the one it was sent (`MantleAPI.for_caller`, `mantle_api.exchange_for_mantle`); a token addressed to Ember is never sent to Mantle.
+
+### Changed (review 12)
+- Ember's content mirror is never Mantle's content bucket (`mantle_api.refuse_mantle_bucket`, on every store open and in the mesh-stats fallback): the mirror must be a bucket Ember names in `EMBER_OVH_BUCKET` (the mirror's default is Mantle's) and none in `EMBER_FORBIDDEN_BUCKETS` or Mantle's own bucket settings. Ember reaches Mantle's data by its API only.
+
+- Ember's refresh names its client (`client_id`, `EMBER_ORIGIN_CLIENT_ID`, default `platform`), which Origin now checks against the family.
+
+### Changed (review 11)
+- Ember shares nothing (John, 2026-11-02): `share` and `op.share` are refused in every mode, and Ember's Mantle client makes no grant. Sharing happens only in the person's own session. Ember keeps `remember` (a Create to the drop key) and the read check (a verdict).
+- Ember's own credential is the delegation Origin issues to Ember's account: Ember no longer exchanges it to narrow itself. The refresh answer is capped while it streams.
+- The store refusal sees through Windows long-path (`\\?\`) and `localhost` administrative-share spellings, refuses a hard-linked store file or one that is, by identity, a file in Mantle's folders, covers `EMBER_CONTENT_DIR`, and checks the opened store again.
+- A delegation issued before its person's published sign-in bound is refused (`prism.trust.not_before`).
+
+### Changed (review 10)
+- Ember opens no person's content. A memory goes into the person's own memory collection by its derived id (Mantle makes it at their sign-in), as a Create Mantle seals to the collection's drop key; Ember never creates or reads it. A share is one Read grant on one artifact to one named person, expiring within 7 days (`SHARE_DAYS`); Ember never shares with the commons. The read check is Mantle's verdict (`GET /grants/my-access`), never a read.
+- Ember's index holds none of Mantle's rows (`refuse_mantle_rows`), so no answer rests on Mantle text a caller may not read; the index rebuild no longer reads Mantle.
+- Ember's own credential is a delegation narrowed to Ember (token exchange after each refresh), never a full person token; a refused refresh family switches it off once, with an error, and is not asked again.
+- Answers from Mantle and Origin are capped while they stream, and a declared length over the cap is refused before anything is read.
+- A withheld answer reads exactly like an empty one (`WITHHELD_TEXT` is `EMPTY_TEXT`).
+- The store refusal also covers Ember's keys folders (`KEYS_DIR`, `EMBER_STORE_KEYS_DIR`) against Mantle's folders (`MANTLE_KEYS_DIR` too), and every store open goes through it (`open_own_store`).
+
+### Changed (review 8)
+- Ember's HTTP surface takes only a delegation Origin narrows to it (`principal_type` delegation, `aud` and `act.sub` `ember`, no `platform:admin`); a caller's full platform token is refused.
+- Ember's own refresh token rotates one process at a time (a file lock beside `mantle.refresh`), a lost answer is retried once with the same token, a refresh token with no keys folder to keep its successor is refused, and once the seed has been spent it is never presented again, even if the kept file is lost.
+- Rows read from Mantle are indexed under Mantle's namespace (`mantle:<id>`) and their own author, never re-signed as Ember's; an answer citing one is shown only to a caller who may Read it in Mantle now (`mantle_api.readable_by`).
+- `op.share` over `/v1/invoke` keeps `to_principal`, and shares to the commons only when asked (`to_public=true`).
+- Ember's store is refused anywhere inside Mantle's folders, compared as real paths (the store file as well as its folder), and with Mantle configured Ember must be told Mantle's folders (`EMBER_FORBIDDEN_DIRS` or `MANTLE_DATA_DIR`). `MantleAPI.from_env(caller_token="")` never falls back to Ember's own credential; artifact ids are quoted into one path segment, redirects are not followed, and answers are capped at 4 MiB and 200 items a page.
+
+### Changed
+- Ember keeps the newest refresh token Origin returns in its own keys folder (`$KEYS_DIR/mantle.refresh`, 0600, written atomically) and presents only that one: Origin rotates refresh tokens on use and revokes a reused one's whole family. `EMBER_MANTLE_REFRESH_TOKEN` seeds the first exchange only.
+- The BLAS negative control runs its child with every thread cap removed.
+- Ember reaches Mantle's data through Mantle's HTTP API, never Mantle's store (`ember.mantle_api`). With `EMBER_MANTLE_URI` set, a memory (`remember`) is created in the caller's own memory collection in Mantle and a share (`share`) is a grant made there, both on the caller's own Origin token; the index rebuild also reads what Ember's own credential may see (`GET /artifacts/visible`). Ember's own credential is the refresh token of its Origin account (`EMBER_MANTLE_REFRESH_TOKEN`, exchanged at `EMBER_ORIGIN_URI`), or a fixed `EMBER_MANTLE_TOKEN` for development.
+- Ember keeps its own store and key, and refuses to start on a store folder that holds Mantle's lattice (`MANTLE_LATTICE_PATH`).
+
 ## [0.2.4] - 2026-10-31
 
 ### Changed

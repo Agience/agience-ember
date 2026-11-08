@@ -95,7 +95,7 @@ _register_host_seams()
 # want: an empty ontology in its place would answer "this corpus does not contain that concept" for
 # every concept, which is a reading nobody took ([[absence-is-not-an-affirmative-claim]]).
 from crystal.ontology import driver as _ontology_driver
-from mantle.shard.local_store import open_store as _open_store
+from ember.mantle_api import open_own_store as _open_store
 
 _ontology_driver.set_default_store_provider(_open_store)
 
@@ -113,7 +113,7 @@ from ember.runtime.read_path import Result, answer_query
 from ember.runtime.relay import Channel, Disconnected, MeshChannel
 from mantle.shard.store import ShardStore
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 __all__ = [
     "Ember", "NotInitialised",

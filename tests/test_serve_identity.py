@@ -69,7 +69,7 @@ def test_no_token_is_anonymous_not_an_assumed_person(monkeypatch):
 
 def test_valid_origin_jwt_resolves_to_that_caller(monkeypatch):
     monkeypatch.delenv("EMBER_INVOKE_TOKEN", raising=False)
-    _stub_verify(monkeypatch, lambda tok, **kw: {"sub": "alice@example.com"}
+    _stub_verify(monkeypatch, lambda tok, **kw: {"sub": "alice@example.com", "principal_type": "delegation", "aud": "ember", "act": {"sub": "ember"}, "iat": __import__("time").time()}
                  if tok == "good" else (_ for _ in ()).throw(ValueError("bad")))
     serve._resolve_delegate(_H({"Authorization": "Bearer good"}), store=object())
     assert _Delegate.last["person"] == "alice@example.com"      # their scope, not the node's
@@ -94,10 +94,10 @@ def test_a_token_without_sub_is_not_an_identity(monkeypatch):
 
 
 def test_origin_is_checked_before_the_shared_secret_header(monkeypatch):
-    """A verified IdP identity outranks a header-asserted one: the header path serves internal
-    callers, and a real token wins over it."""
+    """A verified IdP identity is the only identity: a header naming a delegate names nobody,
+    even behind the shared secret (`test_review21_ember.py`)."""
     monkeypatch.setenv("EMBER_INVOKE_TOKEN", "shared")
-    _stub_verify(monkeypatch, lambda tok, **kw: {"sub": "alice@example.com"})
+    _stub_verify(monkeypatch, lambda tok, **kw: {"sub": "alice@example.com", "principal_type": "delegation", "aud": "ember", "act": {"sub": "ember"}, "iat": __import__("time").time()})
     serve._resolve_delegate(_H({"Authorization": "Bearer good",
                                 "X-Ember-Token": "shared",
                                 "X-Ember-Principal": "mallory@evil"}), store=object())

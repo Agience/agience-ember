@@ -53,15 +53,10 @@ def _ensure_platform_key() -> None:
     mantle's process only (`main.py:237`) and by mantle's own maintenance scripts; ember has
     never called it.
 
-    This is not a new exposure, which is the part worth writing down. It looks like making the
-    local leaf a custodian of the platform KEK — a security-architecture change — and it is not.
-    Measured 2026-08-26 on 71/home: `service_common.sh:252` exports `KEYS_DIR` to every service
-    on the node, ember included, and that directory holds `encryption.key`. Ember already
-    possesses the key by configuration; what it lacked was the one call that lets it use what it
-    was already given. Ember has no store of its own — mantle is ember's store — and
-    `EMBER_SQLITE_DIR` and `MANTLE_LATTICE_PATH` are the same file, opened through mantle's own
-    `open_store`: the SQLite lattice + FS content, via mantle, the one data path. The split is
-    between processes, never between trust domains.
+    The key is Ember's own: `KEYS_DIR` names Ember's own keys folder, and the store it seals into
+    is Ember's own store, in Ember's own folder. Ember never holds Mantle's key and never opens
+    Mantle's store; what it reads or writes of Mantle's data goes over Mantle's API
+    (`ember.mantle_api`, John 2026-11-02).
 
     Best effort. A node with no `encryption.key` (pre-setup, or a leaf that genuinely holds none)
     must still start; the seal then refuses at the write, loudly, which is the correct failure.

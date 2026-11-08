@@ -54,9 +54,12 @@ def origin(tmp_path, monkeypatch):
 
     def sign(**claims):
         now = int(time.time())
-        body = {"iss": ISSUER, "sub": "alice@example.com", "aud": ISSUER,
+        # The token a caller presents to Ember: a delegation Origin narrows to it (review 8, R3).
+        body = {"iss": ISSUER, "sub": "alice@example.com", "aud": "ember",
+                "principal_type": "delegation", "act": {"sub": "ember"},
                 "iat": now, "exp": now + 300}
         body.update(claims)
+        body = {k: v for k, v in body.items() if v is not None}
         return jose_jwt.encode(body, pem, algorithm="RS256", headers={"kid": "origin-1"})
 
     yield sign
@@ -83,8 +86,10 @@ def test_an_access_token_names_its_subject(origin):
     {"aud": "mantle", "principal_type": "delegation", "act": {"sub": "platform-mail"}},
     {"aud": "agience", "principal_type": "server"},
     {"aud": "https://another-authority.test"},
+    {"aud": ISSUER, "principal_type": None, "act": None},
+    {"scope": "platform:admin"},
 ], ids=["refresh", "email_verify", "pwd_reset", "delegation", "system-delegation", "server",
-        "other-audience"])
+        "other-audience", "full-platform-token", "admin-scope"])
 def test_a_token_that_is_not_an_access_token_names_nobody(origin, claims, monkeypatch):
     from ember.surface import serve
     monkeypatch.delenv("EMBER_INVOKE_TOKEN", raising=False)

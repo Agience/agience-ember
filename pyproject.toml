@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agience-ember"
-version = "0.2.4"
+version = "0.2.5"
 description = "Ember — an observer unit: the Agience local leaf/cache, two-way, holds its own shards and runs disconnected. Import name is `ember`."
 readme = { file = "README.md", content-type = "text/markdown" }
 # 3.11, matching every package below it. Ember imports `agience-prism`, `agience-crystal` and
@@ -44,7 +44,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.24",        # BSD — anchor geometry
     "cryptography>=42.0", # Apache/BSD — Ed25519 shard signatures
-    "agience-prism[trust,vector,wire]>=0.1.4",
+    "agience-prism[trust,vector,wire]>=0.1.9",
                           # Apache — declared because ember imports it directly, at 63 import sites
                           # across non-test source:
                           #   [wire]  frames · conservation · demurrage · propagation · minhash ·
@@ -106,7 +106,7 @@ Issues = "https://github.com/Agience/agience-ember/issues"
 # `host` serves Ember's operator surface to local services (the "vice versa" direction). It is a
 # no-op that resolves to a dependency already required above, kept so `pip install
 # agience-ember[host]` succeeds.
-host = ["agience-prism>=0.1.4"]
+host = ["agience-prism>=0.1.9"]
 # The test runners. No `pytest-asyncio`: this suite has zero async tests — measured, not
 # assumed — so listing it would install a plugin nothing here uses.
 #

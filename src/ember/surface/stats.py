@@ -436,7 +436,11 @@ def _mesh_remote(store):
         return r
     try:
         from mantle.shard.content_tier import open_ovh_store
-        return open_ovh_store(store.keys_dir)
+        from types import SimpleNamespace
+        from ember import mantle_api
+        remote = open_ovh_store(store.keys_dir)
+        mantle_api.refuse_mantle_bucket(SimpleNamespace(content=SimpleNamespace(remote=remote)))
+        return remote
     except Exception:
         return None
 

@@ -1224,8 +1224,7 @@ CONTROL_OPS = [
      "carries a citation + provenance rung"),
     ("op.remember", "store an owner-provided statement as a PRIVATE, owner-scoped, gated artifact "
      "(HUMAN_VALIDATED; no_share + no_promote by default) — conversation as verification"),
-    ("op.share", "the CONSENT gate: the owner explicitly makes a private memory shareable — the "
-     "only way owner-provided information ever leaves the private scope"),
+    ("op.share", "refused: Ember shares nothing; sharing happens only in the person's own session"),
     ("op.operator.define", "create/update an operator FROM DATA (kind + spec) — live immediately, "
      "no code, no restart; operators create operators"),
     # ── the cache tektons. Their `context` is their offer, and the offer is the whole point ──────
@@ -1378,14 +1377,29 @@ def _principal() -> str:
 
 
 
-def remember(store, text: str, *, principal: Optional[str] = None) -> Dict[str, Any]:
+def _no_caller_token(what: str) -> Dict[str, Any]:
+    return {"reason": f"{what} is made in Mantle on the caller's own Origin token, and this "
+                      f"request presented none"}
+
+
+def remember(store, text: str, *, principal: Optional[str] = None,
+             mantle=None) -> Dict[str, Any]:
     """Ingest an owner-provided statement as a private, owner-scoped, gated artifact. Content is
     encrypted into the content store, and the index carries only keyed lemmas for recall. The
     artifact stays inside the owner's scope: promotion and sharing both go through `share`, under
-    consent. Returns what was stored."""
-    principal = principal or _principal()
+    consent. Returns what was stored.
+
+    With Mantle configured (`EMBER_MANTLE_URI`) the memory is the person's, in Mantle: it is created
+    in their own memory collection over Mantle's API on their own token (`mantle`, a
+    `mantle_api.MantleAPI` on the caller's token), never in Ember's store (John, 2026-11-02)."""
+    from ember import mantle_api
     if not text or not text.strip():
         return {"stored": False, "reason": "empty"}
+    if mantle_api.configured():
+        if mantle is None:
+            return {"stored": False, **_no_caller_token("a memory")}
+        return _remember_in_mantle(mantle, text)
+    principal = principal or _principal()
     if not is_bootstrapped(store):
         bootstrap(store)
     from mantle.shard import content as C
@@ -1415,66 +1429,38 @@ def remember(store, text: str, *, principal: Optional[str] = None) -> Dict[str, 
     return {"stored": True, "id": mid, "collection": pid, "private": True}
 
 
+def _remember_in_mantle(mantle, text: str) -> Dict[str, Any]:
+    """The memory, created in the caller's own memory collection in Mantle. Theirs by their
+    creation grant; Mantle seals the content; the lemmas ride in the context for recall."""
+    from ember import mantle_api
+    # Mantle indexes the memory itself, under the collection's own keys; Ember sends the text and
+    # nothing derived from it in the clear.
+    try:
+        col = mantle.memory_collection_id()
+        made = mantle.create_in(col, content=text.strip(), content_type="text/markdown",
+                                name=" ".join(text.split()[:8])[:80],
+                                context={"via": "op.remember"})
+    except (mantle_api.MantleRefused, mantle_api.MantleUnavailable) as exc:
+        return {"stored": False, "reason": str(exc)}
+    if made is None:
+        return {"stored": False, "reason": "your memory collection is made at your next sign-in "
+                                           "to Agience; Ember does not make it for you"}
+    return {"stored": True, "id": made["id"], "collection": col, "private": True}
+
+
+#: Why Ember shares nothing (John, 2026-11-02, review 11).
+SHARE_REFUSED = ("Ember shares nothing: sharing happens only in the person's own session, at "
+                 "Mantle, on their own sign-in")
+
+
 def share(store, artifact_id: str, *, to_principal: Optional[str] = None,
           to_collection: str = "subjects",
           principal: Optional[str] = None, confirm: bool = False,
-          stake: float = 1.0) -> Dict[str, Any]:
-    """The consent gate — the one path by which owner-provided information leaves the private scope.
-    Two shapes, both requiring `confirm=True`, so sharing is always an explicit act:
-
-      • `to_principal=<person>` — share with a person (#1): mint them a Read grant on this artifact.
-        It stays gated; their light-cone now reaches it. Reversible, and no content migration.
-      • otherwise — make public (#2): grant the public entity Read on this same artifact, list it
-        under `to_collection` for browsing, and record the consent plus a staked claim on it — truth
-        is economic. One artifact, now public: no copy and no re-key.
-
-    Settlement (accrue/slash) rides the same verified/refuted counters that select operators."""
-    principal = principal or _principal()
-    a = store.artifacts.get_artifact(artifact_id)
-    if not a:
-        return {"shared": False, "reason": "not found"}
-    from mantle.db import access
-    # Only the owner may consent, and ownership is grant-derived: the grantee of the grounding
-    # collection's grant, rather than an `owner` field. A row nobody owns (public/ungated) has no
-    # consent to give here.
-    g = a.get("collection_id") or a.get("origin_root")
-    holder = access.gated_owner_map(store).get(str(g)) if g else None
-    if holder is None or holder != principal:
-        return {"shared": False, "reason": "not owner"}
-    if not confirm:
-        return {"shared": False, "reason": "consent required",
-                "preview_lemmas": (a.get("lemmas") or [])[:12],
-                "hint": "re-invoke with confirm=true (and an optional stake) to consent to sharing"}
-
-    # ── #1 — share with a person: grant them Read (CRUDEASIO Share). The artifact stays gated and
-    #    stays the owner's; the grantee's light-cone now reaches exactly this artifact. Cheap,
-    #    reversible (revoke is one edit), no content migration. The grant is on the artifact id, so
-    #    it covers this artifact alone and the rest of the owner's collection stays gated.
-    if to_principal:
-        access.grant_read(store, artifact_id, to_principal, principal)
-        from ember.runtime.runner import evolution
-        evolution.record_invocation(store.artifacts, "op.share", verified=True)
-        return {"shared": True, "id": artifact_id, "with": to_principal, "mode": "grant"}
-
-    # ── #2 — make public: grant the public entity Read on this very artifact, with no copy and no
-    #    re-key. The grant makes `access.is_public` true, so the artifact meshes out and any reader
-    #    may see it; the node that holds it decrypts and serves it (the key follows the node,
-    #    per-collection, rather than the reader). The stake and the consent ride on the artifact
-    #    itself. This is the one path by which owner-provided information becomes public.
-    access.grant_read(store, artifact_id, access.PUBLIC_PRINCIPAL, principal)
-    a["shared_consent"] = {"by": principal, "at": _now()}
-    a["staked_claim"] = {"by": principal, "at": _now(), "stake": float(stake),
-                         "status": "open", "verified": 0, "refuted": 0}
-    a.setdefault("provenance", P_HUMAN)          # a staked human claim, not an unbacked assertion
-    cols = set(a.get("collections") or [])
-    cols.add(to_collection)                       # also list it under the shared collection for browsing
-    a["collections"] = sorted(cols)
-    store.artifacts.put_artifact(a)
-    _ensure_edge(store, artifact_id, to_collection, "member_of")
-    from ember.runtime.runner import evolution
-    evolution.record_invocation(store.artifacts, "op.share", verified=True)
-    return {"shared": True, "id": artifact_id, "to": to_collection,
-            "consented_by": principal, "staked": float(stake), "mode": "public"}
+          stake: float = 1.0, mantle=None, to_public: bool = False) -> Dict[str, Any]:
+    """Refused, always. Ember shares nothing (John, 2026-11-02, review 11): sharing happens only in
+    the person's own session. Ember keeps `remember` (a Create to the drop key) and the read check
+    (a verdict). The signature stays so callers and operators get the refusal, not an error."""
+    return {"shared": False, "id": artifact_id, "reason": SHARE_REFUSED}
 
 
 def status(store) -> Dict[str, Any]:
@@ -2076,7 +2062,7 @@ def _reach_conversation(store, operator_id: str, args: Dict[str, Any]) -> Dict[s
 
 def invoke(store, operator_id: str, arguments: Optional[Dict[str, Any]] = None,
            *, _pinned: Optional[Dict[str, Any]] = None,
-           _stack: tuple = ()) -> Dict[str, Any]:
+           _stack: tuple = (), mantle=None) -> Dict[str, Any]:
     """Invoke a GENESIS operator by id (the InvokeArtifactRequest analogue, §4). Drives ingestion,
     consolidation, curriculum, and status — all as operators, over the same NEED->OFFER mechanism
     used locally and remotely. Records fitness for what it invokes.
@@ -2085,6 +2071,19 @@ def invoke(store, operator_id: str, arguments: Optional[Dict[str, Any]] = None,
     `_pinned` holds resolved operator artifacts so one logical invocation runs one version
     throughout, `_stack` is the in-flight operator chain used for cycle detection. Callers leave
     both to their defaults."""
+    from ember import mantle_api as _mantle_api
+    args0 = dict(arguments or {})
+    # A person's memory and shares are Mantle's: with Mantle configured they touch no store here.
+    if _mantle_api.configured() and operator_id == "op.remember":
+        return {"operator": operator_id,
+                "result": remember(store, args0.get("text", ""), principal=args0.get("principal"),
+                                   mantle=mantle)}
+    if _mantle_api.configured() and operator_id == "op.share":
+        return {"operator": operator_id,
+                "result": share(store, args0.get("artifact_id") or args0.get("id", ""),
+                                to_principal=args0.get("to_principal"),
+                                confirm=bool(args0.get("confirm", False)), mantle=mantle,
+                                to_public=args0.get("to_public") is True)}
     from ember.runtime.runner import evolution
     if not is_bootstrapped(store):
         bootstrap(store)
@@ -2097,14 +2096,17 @@ def invoke(store, operator_id: str, arguments: Optional[Dict[str, Any]] = None,
         return {"operator": operator_id, "result": res}
     if operator_id == "op.remember":
         return {"operator": operator_id,
-                "result": remember(store, args.get("text", ""), principal=args.get("principal"))}
+                "result": remember(store, args.get("text", ""), principal=args.get("principal"),
+                                   mantle=mantle)}
     if operator_id == "op.share":
         return {"operator": operator_id,
                 "result": share(store, args.get("artifact_id") or args.get("id", ""),
+                                 to_principal=args.get("to_principal"),
+                                 to_public=args.get("to_public") is True,
                                  to_collection=args.get("to_collection", "subjects"),
                                  principal=args.get("principal"),
                                  confirm=bool(args.get("confirm", False)),
-                                 stake=float(args.get("stake", 1.0)))}
+                                 stake=float(args.get("stake", 1.0)), mantle=mantle)}
     if operator_id == "op.recognize":         # activation over the ontology (which concepts fire)
         from ember.ontology import activation
         return {"operator": operator_id,
@@ -3141,7 +3143,7 @@ def record_metrics(store, *, path: Optional[str] = None) -> Dict[str, Any]:
 if __name__ == "__main__":  # python -m ember.genesis [stage0] [metrics]
     import json
     import sys
-    from mantle.shard.local_store import open_store
+    from ember.mantle_api import open_own_store as open_store
     s = open_store()
     print("store ready:", s.ready(), "| pre-count:", s.artifacts.count())
     result = bootstrap(s)

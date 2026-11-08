@@ -1052,7 +1052,7 @@ def _demo():
     # amplitude — a correct reading and a useless demonstration. The print below says which
     # happened.
     try:
-        from mantle.shard.local_store import open_store
+        from ember.mantle_api import open_own_store as open_store
         store = open_store()
         from crystal.ontology import driver as _wn
         _wn.bind(store)

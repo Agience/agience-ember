@@ -14,6 +14,8 @@ module cannot import another. The `sys.path` line below makes the helpers import
 default directory insertion does not happen.
 """
 from __future__ import annotations
+import os as _nb_os
+_nb_os.environ.setdefault("AGIENCE_NOT_BEFORE_NO_POLL", "1")   # no Origin poller in tests
 
 import os as _os
 

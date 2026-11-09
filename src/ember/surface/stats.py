@@ -520,7 +520,7 @@ STATUS_BUCKET = _os.getenv("EMBER_STATUS_BUCKET", "agience-genesis-status")
 # ── The dashboard facet seam ─────────────────────────────────────────────────────────────────────
 # Rendering is a persona's view, so the dashboard renderer lives in `aria.facets.dashboard_render`
 # and ember imports no chorus module. It arrives here by injection: a host that serves both wires it,
-# the way `host_lumen.py` wires lumen's responder into aria's bff.
+# the way Chorus's persona loader wires lumen's responder into aria's bff.
 #
 # Unwired, publishing stops before the PUT, leaving the last good public status object in place —
 # see `publish_public_status`, which distinguishes "no renderer" from "a renderer that produced

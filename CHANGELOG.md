@@ -7,6 +7,9 @@ All notable changes to `agience-ember` are recorded here. The format follows
 
 ## [0.2.5] - 2026-11-08
 
+### Fixed (release candidate)
+- `httpx` is a declared dependency. `ember/mantle_api.py`, which `ember/__init__.py` imports, calls Mantle's API with it, and Mantle declares httpx only for its service install, so a clean install of Ember could not import `ember`.
+
 ### Changed (review 31)
 - The `agience-prism` floor is 0.1.9, the `host` extra's included.
 
